@@ -1,5 +1,6 @@
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { Ionicons } from '@expo/vector-icons';
 import TodayScreen from './screens/TodayScreen';
 import TasksScreen from './screens/TasksScreen';
 
@@ -16,8 +17,24 @@ export default function App() {
           tabBarInactiveTintColor: '#666666',
         }}
       >
-        <Tab.Screen name="Today" component={TodayScreen} />
-        <Tab.Screen name="Tasks" component={TasksScreen} />
+        <Tab.Screen
+          name="Today"
+          component={TodayScreen}
+          options={{
+            tabBarIcon: ({ color, size }) => (
+              <Ionicons name="stopwatch-outline" size={size} color={color} />
+            ),
+          }}
+        />
+        <Tab.Screen
+          name="Tasks"
+          component={TasksScreen}
+          options={{
+            tabBarIcon: ({ color, size }) => (
+              <Ionicons name="checkbox-outline" size={size} color={color} />
+            ),
+          }}
+        />
       </Tab.Navigator>
     </NavigationContainer>
   );
