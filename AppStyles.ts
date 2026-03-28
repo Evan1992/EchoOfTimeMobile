@@ -42,12 +42,20 @@ export const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingVertical: 8,
+    paddingHorizontal: 8,
     borderBottomWidth: 1,
     borderBottomColor: '#2a2a2a',
+    borderRadius: 6,
+  },
+  lapRowSelected: {
+    backgroundColor: '#2a2a2a',
   },
   lapLabel: {
     color: '#aaaaaa',
     fontSize: 16,
+  },
+  lapLabelSelected: {
+    color: '#ffffff',
   },
   lapInput: {
     color: '#ffffff',

@@ -9,10 +9,12 @@ export default function TodayScreen() {
   const [elapsed, setElapsed] = useState(0); // milliseconds
   const [running, setRunning] = useState(false);
   const [laps, setLaps] = useState<Lap[]>([]);
+  const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [editingName, setEditingName] = useState('');
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const startTimeRef = useRef<number>(0);
+  const lastTapRef = useRef<{ index: number; time: number } | null>(null);
 
   const start = () => {
     startTimeRef.current = Date.now() - elapsed;
@@ -32,6 +34,9 @@ export default function TodayScreen() {
     setRunning(false);
     if (elapsed > 0) {
       setLaps(prev => {
+        if (selectedIndex !== null && selectedIndex < prev.length) {
+          return prev.map((lap, i) => i === selectedIndex ? { ...lap, time: lap.time + elapsed } : lap);
+        }
         const next = [{ name: `Lap ${prev.length + 1}`, time: elapsed }, ...prev];
         return next.slice(0, 5);
       });
@@ -64,6 +69,7 @@ export default function TodayScreen() {
   const dismissEditing = () => {
     Keyboard.dismiss();
     commitEdit();
+    setSelectedIndex(null);
   };
 
   const format = (ms: number) => {
@@ -99,8 +105,18 @@ export default function TodayScreen() {
             {laps.map((lap, i) => (
               <Pressable
                 key={i}
-                style={styles.lapRow}
-                onPress={(e) => { e.stopPropagation(); startEditing(i); }}
+                style={[styles.lapRow, selectedIndex === i && styles.lapRowSelected]}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  const now = Date.now();
+                  if (lastTapRef.current?.index === i && now - lastTapRef.current.time < 300) {
+                    lastTapRef.current = null;
+                    startEditing(i);
+                  } else {
+                    lastTapRef.current = { index: i, time: now };
+                    setSelectedIndex(i === selectedIndex ? null : i);
+                  }
+                }}
               >
                 {editingIndex === i ? (
                   <TextInput
@@ -113,7 +129,7 @@ export default function TodayScreen() {
                     selectTextOnFocus
                   />
                 ) : (
-                  <Text style={styles.lapLabel}>{lap.name}</Text>
+                  <Text style={[styles.lapLabel, selectedIndex === i && styles.lapLabelSelected]}>{lap.name}</Text>
                 )}
                 <Text style={styles.lapTime}>{format(lap.time)}</Text>
               </Pressable>
