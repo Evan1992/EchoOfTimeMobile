@@ -1,8 +1,9 @@
 import { StyleSheet, Text, View } from 'react-native';
 import { useLaps } from '../LapContext';
+import SwipeableLapRow from '../components/SwipeableLapRow';
 
 export default function TasksScreen() {
-  const { laps } = useLaps();
+  const { laps, setLaps } = useLaps();
 
   const format = (ms: number) => {
     const hours = Math.floor(ms / 3600000);
@@ -20,10 +21,12 @@ export default function TasksScreen() {
       ) : (
         <View style={styles.list}>
           {laps.map((lap, i) => (
-            <View key={i} style={styles.row}>
-              <Text style={styles.name}>{lap.name}</Text>
-              <Text style={styles.time}>{format(lap.time)}</Text>
-            </View>
+            <SwipeableLapRow key={i} onDelete={() => setLaps(prev => prev.filter((_, j) => j !== i))}>
+              <View style={styles.row}>
+                <Text style={styles.name}>{lap.name}</Text>
+                <Text style={styles.time}>{format(lap.time)}</Text>
+              </View>
+            </SwipeableLapRow>
           ))}
         </View>
       )}

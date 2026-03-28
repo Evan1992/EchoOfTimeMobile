@@ -3,6 +3,7 @@ import { useRef, useState } from 'react';
 import { Keyboard, Pressable, Text, TextInput, TouchableWithoutFeedback, View } from 'react-native';
 import { styles } from '../AppStyles';
 import { useLaps } from '../LapContext';
+import SwipeableLapRow from '../components/SwipeableLapRow';
 
 export default function TodayScreen() {
   const [elapsed, setElapsed] = useState(0); // milliseconds
@@ -102,36 +103,37 @@ export default function TodayScreen() {
         {laps.length > 0 && (
           <View style={styles.laps}>
             {laps.slice(0, 5).map((lap, i) => (
-              <Pressable
-                key={i}
-                style={[styles.lapRow, selectedIndex === i && styles.lapRowSelected]}
-                onPress={(e) => {
-                  e.stopPropagation();
-                  const now = Date.now();
-                  if (lastTapRef.current?.index === i && now - lastTapRef.current.time < 300) {
-                    lastTapRef.current = null;
-                    startEditing(i);
-                  } else {
-                    lastTapRef.current = { index: i, time: now };
-                    setSelectedIndex(i === selectedIndex ? null : i);
-                  }
-                }}
-              >
-                {editingIndex === i ? (
-                  <TextInput
-                    style={styles.lapInput}
-                    value={editingName}
-                    onChangeText={setEditingName}
-                    onBlur={commitEdit}
-                    onSubmitEditing={commitEdit}
-                    autoFocus
-                    selectTextOnFocus
-                  />
-                ) : (
-                  <Text style={[styles.lapLabel, selectedIndex === i && styles.lapLabelSelected]}>{lap.name}</Text>
-                )}
-                <Text style={styles.lapTime}>{format(lap.time)}</Text>
-              </Pressable>
+              <SwipeableLapRow key={i} onDelete={() => setLaps(prev => prev.filter((_, j) => j !== i))}>
+                <Pressable
+                  style={[styles.lapRow, selectedIndex === i && styles.lapRowSelected]}
+                  onPress={(e) => {
+                    e.stopPropagation();
+                    const now = Date.now();
+                    if (lastTapRef.current?.index === i && now - lastTapRef.current.time < 300) {
+                      lastTapRef.current = null;
+                      startEditing(i);
+                    } else {
+                      lastTapRef.current = { index: i, time: now };
+                      setSelectedIndex(i === selectedIndex ? null : i);
+                    }
+                  }}
+                >
+                  {editingIndex === i ? (
+                    <TextInput
+                      style={styles.lapInput}
+                      value={editingName}
+                      onChangeText={setEditingName}
+                      onBlur={commitEdit}
+                      onSubmitEditing={commitEdit}
+                      autoFocus
+                      selectTextOnFocus
+                    />
+                  ) : (
+                    <Text style={[styles.lapLabel, selectedIndex === i && styles.lapLabelSelected]}>{lap.name}</Text>
+                  )}
+                  <Text style={styles.lapTime}>{format(lap.time)}</Text>
+                </Pressable>
+              </SwipeableLapRow>
             ))}
           </View>
         )}
