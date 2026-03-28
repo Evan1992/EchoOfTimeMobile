@@ -5,6 +5,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 export default function App() {
   const [elapsed, setElapsed] = useState(0); // milliseconds
   const [running, setRunning] = useState(false);
+  const [laps, setLaps] = useState<number[]>([]);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const startTimeRef = useRef<number>(0);
 
@@ -21,9 +22,12 @@ export default function App() {
     setRunning(false);
   };
 
-  const reset = () => {
+  const stop = () => {
     if (intervalRef.current) clearInterval(intervalRef.current);
     setRunning(false);
+    if (elapsed > 0) {
+      setLaps(prev => [elapsed, ...prev].slice(0, 5));
+    }
     setElapsed(0);
   };
 
@@ -43,9 +47,9 @@ export default function App() {
       <View style={styles.buttons}>
         <Pressable
           style={[styles.button, styles.resetButton]}
-          onPress={reset}
+          onPress={stop}
         >
-          <Text style={styles.buttonText}>Reset</Text>
+          <Text style={styles.buttonText}>Stop</Text>
         </Pressable>
         <Pressable
           style={[styles.button, running ? styles.pauseButton : styles.startButton]}
@@ -54,6 +58,16 @@ export default function App() {
           <Text style={styles.buttonText}>{running ? 'Pause' : 'Start'}</Text>
         </Pressable>
       </View>
+      {laps.length > 0 && (
+        <View style={styles.laps}>
+          {laps.map((lap, i) => (
+            <View key={i} style={styles.lapRow}>
+              <Text style={styles.lapLabel}>Lap {laps.length - i}</Text>
+              <Text style={styles.lapTime}>{format(lap)}</Text>
+            </View>
+          ))}
+        </View>
+      )}
     </View>
   );
 }
@@ -90,6 +104,26 @@ const styles = StyleSheet.create({
   },
   resetButton: {
     backgroundColor: '#3a3a3a',
+  },
+  laps: {
+    marginTop: 32,
+    width: 260,
+  },
+  lapRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#2a2a2a',
+  },
+  lapLabel: {
+    color: '#aaaaaa',
+    fontSize: 16,
+  },
+  lapTime: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontVariant: ['tabular-nums'],
   },
   buttonText: {
     color: '#ffffff',
