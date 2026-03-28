@@ -47,7 +47,15 @@ export default function App() {
     if (editingIndex === null) return;
     const trimmed = editingName.trim();
     if (trimmed.length > 0) {
-      setLaps(prev => prev.map((lap, i) => i === editingIndex ? { ...lap, name: trimmed } : lap));
+      setLaps(prev => {
+        const renamed = prev.map((lap, i) => i === editingIndex ? { ...lap, name: trimmed } : lap);
+        const matchIndex = renamed.findIndex((lap, i) => i !== editingIndex && lap.name === trimmed);
+        if (matchIndex === -1) return renamed;
+        // Merge: sum times into the match, remove the renamed entry
+        return renamed
+          .map((lap, i) => i === matchIndex ? { ...lap, time: lap.time + renamed[editingIndex].time } : lap)
+          .filter((_, i) => i !== editingIndex);
+      });
     }
     setEditingIndex(null);
   };
