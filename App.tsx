@@ -1,6 +1,7 @@
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
+import { LapProvider } from './LapContext';
 import TodayScreen from './screens/TodayScreen';
 import TasksScreen from './screens/TasksScreen';
 
@@ -8,6 +9,7 @@ const Tab = createBottomTabNavigator();
 
 export default function App() {
   return (
+    <LapProvider>
     <NavigationContainer>
       <Tab.Navigator
         screenOptions={{
@@ -37,5 +39,6 @@ export default function App() {
         />
       </Tab.Navigator>
     </NavigationContainer>
+    </LapProvider>
   );
 }

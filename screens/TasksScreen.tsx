@@ -1,9 +1,32 @@
 import { StyleSheet, Text, View } from 'react-native';
+import { useLaps } from '../LapContext';
 
 export default function TasksScreen() {
+  const { laps } = useLaps();
+
+  const format = (ms: number) => {
+    const hours = Math.floor(ms / 3600000);
+    const minutes = Math.floor((ms % 3600000) / 60000);
+    const seconds = Math.floor((ms % 60000) / 1000);
+    return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
+  };
+
+  const pad = (n: number) => String(n).padStart(2, '0');
+
   return (
     <View style={styles.container}>
-      <Text style={styles.text}>Tasks</Text>
+      {laps.length === 0 ? (
+        <Text style={styles.empty}>No tasks yet</Text>
+      ) : (
+        <View style={styles.list}>
+          {laps.map((lap, i) => (
+            <View key={i} style={styles.row}>
+              <Text style={styles.name}>{lap.name}</Text>
+              <Text style={styles.time}>{format(lap.time)}</Text>
+            </View>
+          ))}
+        </View>
+      )}
     </View>
   );
 }
@@ -15,8 +38,29 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  text: {
+  empty: {
+    color: '#666666',
+    fontSize: 16,
+  },
+  list: {
+    width: 260,
+    marginTop: 32,
+  },
+  row: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#2a2a2a',
+  },
+  name: {
+    color: '#aaaaaa',
+    fontSize: 16,
+  },
+  time: {
     color: '#ffffff',
-    fontSize: 24,
+    fontSize: 16,
+    fontVariant: ['tabular-nums'],
   },
 });

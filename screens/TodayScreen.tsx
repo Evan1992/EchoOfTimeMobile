@@ -2,13 +2,12 @@ import { StatusBar } from 'expo-status-bar';
 import { useRef, useState } from 'react';
 import { Keyboard, Pressable, Text, TextInput, TouchableWithoutFeedback, View } from 'react-native';
 import { styles } from '../AppStyles';
-
-type Lap = { name: string; time: number };
+import { useLaps } from '../LapContext';
 
 export default function TodayScreen() {
   const [elapsed, setElapsed] = useState(0); // milliseconds
   const [running, setRunning] = useState(false);
-  const [laps, setLaps] = useState<Lap[]>([]);
+  const { laps, setLaps } = useLaps();
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [editingName, setEditingName] = useState('');
@@ -38,7 +37,7 @@ export default function TodayScreen() {
           return prev.map((lap, i) => i === selectedIndex ? { ...lap, time: lap.time + elapsed } : lap);
         }
         const next = [{ name: `Lap ${prev.length + 1}`, time: elapsed }, ...prev];
-        return next.slice(0, 5);
+        return next;
       });
     }
     setElapsed(0);
@@ -102,7 +101,7 @@ export default function TodayScreen() {
         </View>
         {laps.length > 0 && (
           <View style={styles.laps}>
-            {laps.map((lap, i) => (
+            {laps.slice(0, 5).map((lap, i) => (
               <Pressable
                 key={i}
                 style={[styles.lapRow, selectedIndex === i && styles.lapRowSelected]}
