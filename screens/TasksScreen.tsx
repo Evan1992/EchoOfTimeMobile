@@ -3,7 +3,7 @@ import { useLaps } from '../LapContext';
 import SwipeableLapRow from '../components/SwipeableLapRow';
 
 export default function TasksScreen() {
-  const { laps, setLaps } = useLaps();
+  const { laps: tasks, setLaps: setTasks } = useLaps();
 
   const format = (ms: number) => {
     const hours = Math.floor(ms / 3600000);
@@ -16,15 +16,15 @@ export default function TasksScreen() {
 
   return (
     <View style={styles.container}>
-      {laps.length === 0 ? (
+      {tasks.length === 0 ? (
         <Text style={styles.empty}>No tasks yet</Text>
       ) : (
         <View style={styles.list}>
-          {laps.map((lap, i) => (
-            <SwipeableLapRow key={i} onDelete={() => setLaps(prev => prev.filter((_, j) => j !== i))}>
+          {tasks.map((task, i) => (
+            <SwipeableLapRow key={i} onDelete={() => setTasks(prev => prev.filter((_, j) => j !== i))}>
               <View style={styles.row}>
-                <Text style={styles.name}>{lap.name}</Text>
-                <Text style={styles.time}>{format(lap.time)}</Text>
+                <Text style={styles.name}>{task.name}</Text>
+                <Text style={styles.time}>{format(task.time)}</Text>
               </View>
             </SwipeableLapRow>
           ))}
