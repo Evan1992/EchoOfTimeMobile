@@ -30,7 +30,21 @@ React Native + TypeScript was selected for the following reasons:
 - Expo handles cross-platform builds via EAS — no Xcode/Android Studio required locally
 - Covers all needs for this app; bare workflow available if native modules are ever needed
 
+## Navigation
+
+**React Navigation** (`@react-navigation/native` + `@react-navigation/bottom-tabs`) over Expo Router.
+
+- Expo Router is file-system based and adds conventions that aren't needed for a small app
+- React Navigation gives explicit, code-first control over the tab structure
+- Bottom tab navigator with two tabs: **Today** (stopwatch) and **Tasks**
+
+## Project Structure
+
+- `screens/` — one file per screen (e.g. `TodayScreen.tsx`, `TasksScreen.tsx`)
+- `App.tsx` — navigation setup only; no business logic
+- `AppStyles.ts` — styles extracted from `App.tsx` into a sibling file to keep components focused on logic
+
 ## App
 
 - **Name**: EchoOfTimeMobile
-- **Type**: Stopwatch timer
+- **Type**: Stopwatch timer with lap tracking
