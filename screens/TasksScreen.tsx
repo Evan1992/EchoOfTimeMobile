@@ -1,9 +1,12 @@
 import { StyleSheet, Text, View } from 'react-native';
 import { useLaps } from '../LapContext';
+import { useAuth } from '../AuthContext';
+import { deleteTask } from '../services/firebase';
 import SwipeableLapRow from '../components/SwipeableLapRow';
 
 export default function TasksScreen() {
   const { laps: tasks, setLaps: setTasks } = useLaps();
+  const { auth, getToken } = useAuth();
 
   const format = (ms: number) => {
     const hours = Math.floor(ms / 3600000);
@@ -21,7 +24,14 @@ export default function TasksScreen() {
       ) : (
         <View style={styles.list}>
           {tasks.map((task, i) => (
-            <SwipeableLapRow key={i} onDelete={() => setTasks(prev => prev.filter((_, j) => j !== i))}>
+            <SwipeableLapRow key={i} onDelete={async () => {
+                setTasks(prev => prev.filter((_, j) => j !== i));
+                if (auth && tasks[i].fbIndex !== undefined) {
+                  const token = await getToken();
+                  deleteTask(auth.userId, token, tasks[i].fbIndex!)
+                    .catch(err => console.error('Failed to delete task:', err));
+                }
+              }}>
               <View style={styles.row}>
                 <Text style={styles.name}>{task.name}</Text>
                 <Text style={styles.time}>{format(task.time)}</Text>
