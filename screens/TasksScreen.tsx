@@ -62,10 +62,10 @@ const styles = StyleSheet.create({
   },
   empty: {
     color: '#666666',
-    fontSize: 16,
+    fontSize: 18,
   },
   list: {
-    width: 260,
+    width: 300,
     marginTop: 32,
   },
   row: {
@@ -83,7 +83,7 @@ const styles = StyleSheet.create({
   },
   name: {
     color: '#aaaaaa',
-    fontSize: 16,
+    fontSize: 18,
   },
   nameActive: {
     color: '#ffffff',
@@ -93,7 +93,7 @@ const styles = StyleSheet.create({
   },
   time: {
     color: '#ffffff',
-    fontSize: 16,
+    fontSize: 18,
     fontVariant: ['tabular-nums'],
   },
 });
