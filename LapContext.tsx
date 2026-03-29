@@ -12,12 +12,15 @@ export type Lap = {
 type LapContextType = {
   laps: Lap[];
   setLaps: React.Dispatch<React.SetStateAction<Lap[]>>;
+  activeIndices: number[];       // FIFO queue, max 5, indices into laps[]
+  activateTask: (index: number) => void; // push to tail, drop head
 };
 
 const LapContext = createContext<LapContextType | null>(null);
 
 export function LapProvider({ children }: { children: React.ReactNode }) {
   const [laps, setLaps] = useState<Lap[]>([]);
+  const [activeIndices, setActiveIndices] = useState<number[]>([]);
   const { auth, getToken } = useAuth();
   const initialLoadDone = useRef(false);
 
@@ -29,6 +32,7 @@ export function LapProvider({ children }: { children: React.ReactNode }) {
       .then(token => fetchTasks(auth.userId, token))
       .then(data => {
         setLaps(data);
+        setActiveIndices(data.slice(0, 5).map((_, i) => i));
         initialLoadDone.current = true;
       })
       .catch(err => {
@@ -37,7 +41,19 @@ export function LapProvider({ children }: { children: React.ReactNode }) {
       });
   }, [auth?.userId]);
 
-  return <LapContext.Provider value={{ laps, setLaps }}>{children}</LapContext.Provider>;
+  const activateTask = (index: number) => {
+    setActiveIndices(prev => {
+      if (prev.includes(index)) return prev;
+      const next = [...prev.slice(-(4)), index]; // keep last 4, append new
+      return next;
+    });
+  };
+
+  return (
+    <LapContext.Provider value={{ laps, setLaps, activeIndices, activateTask }}>
+      {children}
+    </LapContext.Provider>
+  );
 }
 
 export function useLaps() {

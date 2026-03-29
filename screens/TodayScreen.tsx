@@ -10,7 +10,7 @@ import SwipeableLapRow from '../components/SwipeableLapRow';
 export default function TodayScreen() {
   const [elapsed, setElapsed] = useState(0); // milliseconds
   const [running, setRunning] = useState(false);
-  const { laps, setLaps } = useLaps();
+  const { laps, setLaps, activeIndices } = useLaps();
   const { auth, getToken } = useAuth();
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
@@ -120,46 +120,50 @@ export default function TodayScreen() {
         </View>
         {laps.length > 0 && (
           <View style={styles.laps}>
-            {laps.slice(0, 5).map((lap, i) => (
-              <SwipeableLapRow key={i} onDelete={async () => {
-                setLaps(prev => prev.filter((_, j) => j !== i));
-                if (auth && laps[i].fbIndex !== undefined) {
-                  const token = await getToken();
-                  deleteTask(auth.userId, token, laps[i].fbIndex!)
-                    .catch(err => console.error('Failed to delete task:', err));
-                }
-              }}>
-                <Pressable
-                  style={[styles.lapRow, selectedIndex === i && styles.lapRowSelected]}
-                  onPress={(e) => {
-                    e.stopPropagation();
-                    const now = Date.now();
-                    if (lastTapRef.current?.index === i && now - lastTapRef.current.time < 300) {
-                      lastTapRef.current = null;
-                      startEditing(i);
-                    } else {
-                      lastTapRef.current = { index: i, time: now };
-                      setSelectedIndex(i === selectedIndex ? null : i);
-                    }
-                  }}
-                >
-                  {editingIndex === i ? (
-                    <TextInput
-                      style={styles.lapInput}
-                      value={editingName}
-                      onChangeText={setEditingName}
-                      onBlur={commitEdit}
-                      onSubmitEditing={commitEdit}
-                      autoFocus
-                      selectTextOnFocus
-                    />
-                  ) : (
-                    <Text style={[styles.lapLabel, selectedIndex === i && styles.lapLabelSelected]}>{lap.name}</Text>
-                  )}
-                  <Text style={styles.lapTime}>{format(lap.time)}</Text>
-                </Pressable>
-              </SwipeableLapRow>
-            ))}
+            {activeIndices.map((lapIdx) => {
+              const lap = laps[lapIdx];
+              if (!lap) return null;
+              return (
+                <SwipeableLapRow key={lapIdx} onDelete={async () => {
+                  setLaps(prev => prev.filter((_, j) => j !== lapIdx));
+                  if (auth && lap.fbIndex !== undefined) {
+                    const token = await getToken();
+                    deleteTask(auth.userId, token, lap.fbIndex!)
+                      .catch(err => console.error('Failed to delete task:', err));
+                  }
+                }}>
+                  <Pressable
+                    style={[styles.lapRow, selectedIndex === lapIdx && styles.lapRowSelected]}
+                    onPress={(e) => {
+                      e.stopPropagation();
+                      const now = Date.now();
+                      if (lastTapRef.current?.index === lapIdx && now - lastTapRef.current.time < 300) {
+                        lastTapRef.current = null;
+                        startEditing(lapIdx);
+                      } else {
+                        lastTapRef.current = { index: lapIdx, time: now };
+                        setSelectedIndex(lapIdx === selectedIndex ? null : lapIdx);
+                      }
+                    }}
+                  >
+                    {editingIndex === lapIdx ? (
+                      <TextInput
+                        style={styles.lapInput}
+                        value={editingName}
+                        onChangeText={setEditingName}
+                        onBlur={commitEdit}
+                        onSubmitEditing={commitEdit}
+                        autoFocus
+                        selectTextOnFocus
+                      />
+                    ) : (
+                      <Text style={[styles.lapLabel, selectedIndex === lapIdx && styles.lapLabelSelected]}>{lap.name}</Text>
+                    )}
+                    <Text style={styles.lapTime}>{format(lap.time)}</Text>
+                  </Pressable>
+                </SwipeableLapRow>
+              );
+            })}
           </View>
         )}
       </View>

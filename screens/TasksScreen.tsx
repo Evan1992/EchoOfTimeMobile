@@ -1,11 +1,11 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useLaps } from '../LapContext';
 import { useAuth } from '../AuthContext';
 import { deleteTask } from '../services/firebase';
 import SwipeableLapRow from '../components/SwipeableLapRow';
 
 export default function TasksScreen() {
-  const { laps: tasks, setLaps: setTasks } = useLaps();
+  const { laps: tasks, setLaps: setTasks, activeIndices, activateTask } = useLaps();
   const { auth, getToken } = useAuth();
 
   const format = (ms: number) => {
@@ -23,8 +23,10 @@ export default function TasksScreen() {
         <Text style={styles.empty}>No tasks yet</Text>
       ) : (
         <View style={styles.list}>
-          {tasks.map((task, i) => (
-            <SwipeableLapRow key={i} onDelete={async () => {
+          {tasks.map((task, i) => {
+            const isActive = activeIndices.includes(i);
+            return (
+              <SwipeableLapRow key={i} onDelete={async () => {
                 setTasks(prev => prev.filter((_, j) => j !== i));
                 if (auth && tasks[i].fbIndex !== undefined) {
                   const token = await getToken();
@@ -32,12 +34,19 @@ export default function TasksScreen() {
                     .catch(err => console.error('Failed to delete task:', err));
                 }
               }}>
-              <View style={styles.row}>
-                <Text style={styles.name}>{task.name}</Text>
-                <Text style={styles.time}>{format(task.time)}</Text>
-              </View>
-            </SwipeableLapRow>
-          ))}
+                <Pressable
+                  style={[styles.row, isActive && styles.rowActive]}
+                  onPress={() => {
+                    if (isActive) return;
+                    activateTask(i);
+                  }}
+                >
+                  <Text style={[styles.name, isActive && styles.nameActive]}>{task.name}</Text>
+                  <Text style={[styles.time, isActive && styles.timeActive]}>{format(task.time)}</Text>
+                </Pressable>
+              </SwipeableLapRow>
+            );
+          })}
         </View>
       )}
     </View>
@@ -67,9 +76,20 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#2a2a2a',
   },
+  rowActive: {
+    borderLeftWidth: 2,
+    borderLeftColor: '#34c759',
+    paddingLeft: 8,
+  },
   name: {
     color: '#aaaaaa',
     fontSize: 16,
+  },
+  nameActive: {
+    color: '#ffffff',
+  },
+  timeActive: {
+    color: '#34c759',
   },
   time: {
     color: '#ffffff',
