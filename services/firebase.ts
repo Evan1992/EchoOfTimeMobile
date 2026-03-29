@@ -59,13 +59,13 @@ export async function fetchTasks(userId: string, token: string): Promise<Lap[]> 
   }));
 }
 
-export async function addTask(userId: string, token: string, name: string, seconds: number): Promise<void> {
+export async function addTask(userId: string, token: string, name: string, seconds: number, id: string): Promise<number> {
   // Fetch current array, append new plan, PUT back
   const res = await fetch(`${TODAY_PLANS_PATH(userId)}?auth=${token}`);
   if (!res.ok) throw new Error(`Failed to fetch today_plans: ${res.status}`);
   const current: any[] = (await res.json()) ?? [];
   const newPlan = {
-    id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    id,
     rank: 0,
     title: name,
     comment: "",
@@ -85,6 +85,7 @@ export async function addTask(userId: string, token: string, name: string, secon
     body: JSON.stringify(updated),
   });
   if (!putRes.ok) throw new Error(`Failed to add task: ${putRes.status}`);
+  return current.length; // fbIndex of the newly added plan
 }
 
 export async function updateTaskSeconds(

@@ -1,6 +1,6 @@
 import { StatusBar } from 'expo-status-bar';
 import { useRef, useState } from 'react';
-import { Keyboard, Pressable, RefreshControl, ScrollView, Text, TextInput, TouchableWithoutFeedback, View } from 'react-native';
+import { Keyboard, Pressable, RefreshControl, ScrollView, Text, TextInput, View } from 'react-native';
 import { styles } from '../AppStyles';
 import { useLaps } from '../LapContext';
 import { useAuth } from '../AuthContext';
@@ -50,8 +50,10 @@ export default function TodayScreen() {
       } else {
         const name = `Lap ${laps.length + 1}`;
         const seconds = Math.floor(elapsed / 1000);
-        setLaps(prev => [{ name, time: elapsed }, ...prev]);
-        addTask(auth.userId, token, name, seconds)
+        const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+        setLaps(prev => [{ name, time: elapsed, id }, ...prev]);
+        addTask(auth.userId, token, name, seconds, id)
+          .then(fbIndex => setLaps(prev => prev.map(lap => lap.id === id ? { ...lap, fbIndex } : lap)))
           .catch(err => console.error('Failed to add task:', err));
       }
     }
@@ -113,12 +115,12 @@ export default function TodayScreen() {
   };
 
   return (
-    <TouchableWithoutFeedback onPress={dismissEditing}>
-      <ScrollView
-        contentContainerStyle={styles.container}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-        keyboardShouldPersistTaps="handled"
-      >
+    <ScrollView
+      contentContainerStyle={styles.container}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+      keyboardShouldPersistTaps="handled"
+    >
+      <Pressable style={styles.pressableContainer} onPress={dismissEditing}>
         <StatusBar style="auto" />
         <Text style={styles.timer}>{format(elapsed)}</Text>
         <View style={styles.buttons}>
@@ -184,7 +186,7 @@ export default function TodayScreen() {
               );
             })}
         </View>
-      </ScrollView>
-    </TouchableWithoutFeedback>
+      </Pressable>
+    </ScrollView>
   );
 }

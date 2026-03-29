@@ -7,6 +7,10 @@ export const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  pressableContainer: {
+    alignItems: 'center',
+    width: '100%',
+  },
   timer: {
     fontSize: 80,
     fontVariant: ['tabular-nums'],
