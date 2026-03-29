@@ -88,12 +88,26 @@ export async function addTask(userId: string, token: string, name: string, secon
   return current.length; // fbIndex of the newly added plan
 }
 
+export async function addToUsedTime(userId: string, token: string, elapsedSeconds: number): Promise<void> {
+  const res = await fetch(`${DB_URL}/${userId}/active_plan/today.json?auth=${token}`);
+  if (!res.ok) throw new Error(`Failed to fetch today: ${res.status}`);
+  const today = await res.json();
+  const newUsedTime = (today?.used_time ?? 0) + elapsedSeconds;
+  const patchRes = await fetch(`${DB_URL}/${userId}/active_plan/today.json?auth=${token}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ used_time: newUsedTime }),
+  });
+  if (!patchRes.ok) throw new Error(`Failed to update today used_time: ${patchRes.status}`);
+}
+
 export async function updateTaskSeconds(
   userId: string,
   token: string,
   fbIndex: number | undefined,
   seconds: number,
   planId: string,
+  elapsedSeconds: number,
 ): Promise<void> {
   const updates: Promise<void>[] = [];
 
@@ -122,6 +136,9 @@ export async function updateTaskSeconds(
         if (!res.ok) throw new Error(`Failed to update daily_plans seconds: ${res.status}`);
       })
   );
+
+  // Add elapsed seconds to active_plan/today.used_time
+  updates.push(addToUsedTime(userId, token, elapsedSeconds));
 
   await Promise.all(updates);
 }

@@ -4,7 +4,7 @@ import { Keyboard, Pressable, RefreshControl, ScrollView, Text, TextInput, View 
 import { styles } from '../AppStyles';
 import { useLaps } from '../LapContext';
 import { useAuth } from '../AuthContext';
-import { addTask, updateTaskSeconds, renameTask, deleteTask } from '../services/firebase';
+import { addTask, updateTaskSeconds, addToUsedTime, renameTask, deleteTask } from '../services/firebase';
 import SwipeableLapRow, { SwipeableLapRowHandle } from '../components/SwipeableLapRow';
 
 export default function TodayScreen() {
@@ -44,7 +44,7 @@ export default function TodayScreen() {
         const newSeconds = Math.floor((target.time + elapsed) / 1000);
         setLaps(prev => prev.map((lap, i) => i === selectedIndex ? { ...lap, time: lap.time + elapsed } : lap));
         if (target.id !== undefined) {
-          updateTaskSeconds(auth.userId, token, target.fbIndex, newSeconds, target.id)
+          updateTaskSeconds(auth.userId, token, target.fbIndex, newSeconds, target.id, Math.floor(elapsed / 1000))
             .catch(err => console.error('Failed to update task seconds:', err));
         }
       } else {
@@ -55,6 +55,8 @@ export default function TodayScreen() {
         addTask(auth.userId, token, name, seconds, id)
           .then(fbIndex => setLaps(prev => prev.map(lap => lap.id === id ? { ...lap, fbIndex } : lap)))
           .catch(err => console.error('Failed to add task:', err));
+        addToUsedTime(auth.userId, token, seconds)
+          .catch(err => console.error('Failed to update used_time:', err));
       }
     }
     setElapsed(0);
