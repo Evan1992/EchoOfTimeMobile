@@ -7,19 +7,56 @@ const TODAY_PLAN_PATH = (userId: string, fbIndex: number) =>
   `${DB_URL}/${userId}/active_plan/today/today_plans/${fbIndex}.json`;
 
 export async function fetchTasks(userId: string, token: string): Promise<Lap[]> {
-  const res = await fetch(`${DB_URL}/${userId}/active_plan/today.json?auth=${token}`);
-  if (!res.ok) throw new Error(`Failed to fetch tasks: ${res.status}`);
-  const data = await res.json();
-  if (!data || !data.today_plans) return [];
-  return data.today_plans
-    .map((plan: any, index: number) => ({ plan, index }))
-    .filter(({ plan }: any) => plan.parent_id === undefined)
-    .map(({ plan, index }: any) => ({
-      name: plan.title,
-      time: (plan.seconds ?? 0) * 1000,
-      id: plan.id,
-      fbIndex: index,
-    }));
+  const [todayRes, shortTermRes] = await Promise.all([
+    fetch(`${DB_URL}/${userId}/active_plan/today.json?auth=${token}`),
+    fetch(`${DB_URL}/${userId}/active_plan/short_term_plan/daily_plans.json?auth=${token}`),
+  ]);
+  if (!todayRes.ok) throw new Error(`Failed to fetch tasks: ${todayRes.status}`);
+  if (!shortTermRes.ok) throw new Error(`Failed to fetch short_term_plan: ${shortTermRes.status}`);
+
+  const todayData = await todayRes.json();
+  const todayPlans: any[] = todayData?.today_plans ?? [];
+  const dailyPlans: any[] = (await shortTermRes.json()) ?? [];
+
+  // Build id→plan map; today_plans take priority over daily_plans
+  const idPlanMap = new Map<string, any>();
+  for (const plan of dailyPlans) {
+    idPlanMap.set(plan.id, plan);
+  }
+  for (const plan of todayPlans) {
+    idPlanMap.set(plan.id, plan);
+  }
+
+  const findRoot = (plan: any): any => {
+    if (plan.parent_id === undefined) return plan;
+    const parent = idPlanMap.get(plan.parent_id);
+    if (!parent) return plan;
+    return findRoot(parent);
+  };
+
+  // resultMap keyed by plan id to deduplicate
+  const resultMap = new Map<string, { plan: any; fbIndex: number | undefined }>();
+
+  todayPlans.forEach((plan: any, index: number) => {
+    if (plan.parent_id === undefined) {
+      if (!plan.completed) {
+        resultMap.set(plan.id, { plan, fbIndex: index });
+      }
+    } else {
+      const root = findRoot(plan);
+      if (!resultMap.has(root.id)) {
+        const rootFbIndex = todayPlans.findIndex((p: any) => p.id === root.id);
+        resultMap.set(root.id, { plan: root, fbIndex: rootFbIndex >= 0 ? rootFbIndex : undefined });
+      }
+    }
+  });
+
+  return Array.from(resultMap.values()).map(({ plan, fbIndex }) => ({
+    name: plan.title,
+    time: (plan.seconds ?? 0) * 1000,
+    id: plan.id,
+    fbIndex,
+  }));
 }
 
 export async function addTask(userId: string, token: string, name: string, seconds: number): Promise<void> {
@@ -53,15 +90,39 @@ export async function addTask(userId: string, token: string, name: string, secon
 export async function updateTaskSeconds(
   userId: string,
   token: string,
-  fbIndex: number,
+  fbIndex: number | undefined,
   seconds: number,
+  planId: string,
 ): Promise<void> {
-  const res = await fetch(`${TODAY_PLAN_PATH(userId, fbIndex)}?auth=${token}`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ seconds }),
-  });
-  if (!res.ok) throw new Error(`Failed to update task seconds: ${res.status}`);
+  const updates: Promise<void>[] = [];
+
+  if (fbIndex !== undefined) {
+    updates.push(
+      fetch(`${TODAY_PLAN_PATH(userId, fbIndex)}?auth=${token}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ seconds }),
+      }).then(res => { if (!res.ok) throw new Error(`Failed to update today_plans seconds: ${res.status}`); })
+    );
+  }
+
+  // Also update short_term_plan/daily_plans by planId
+  updates.push(
+    fetch(`${DB_URL}/${userId}/active_plan/short_term_plan/daily_plans.json?auth=${token}`)
+      .then(res => { if (!res.ok) throw new Error(`Failed to fetch daily_plans: ${res.status}`); return res.json(); })
+      .then(async (dailyPlans: any[]) => {
+        if (!dailyPlans) return;
+        const idx = dailyPlans.findIndex((p: any) => p.id === planId);
+        if (idx === -1) return;
+        const res = await fetch(
+          `${DB_URL}/${userId}/active_plan/short_term_plan/daily_plans/${idx}.json?auth=${token}`,
+          { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ seconds }) }
+        );
+        if (!res.ok) throw new Error(`Failed to update daily_plans seconds: ${res.status}`);
+      })
+  );
+
+  await Promise.all(updates);
 }
 
 export async function deleteTask(userId: string, token: string, fbIndex: number): Promise<void> {

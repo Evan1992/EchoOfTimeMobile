@@ -41,8 +41,8 @@ export default function TodayScreen() {
         const target = laps[selectedIndex];
         const newSeconds = Math.floor((target.time + elapsed) / 1000);
         setLaps(prev => prev.map((lap, i) => i === selectedIndex ? { ...lap, time: lap.time + elapsed } : lap));
-        if (target.fbIndex !== undefined) {
-          updateTaskSeconds(auth.userId, token, target.fbIndex, newSeconds)
+        if (target.id !== undefined) {
+          updateTaskSeconds(auth.userId, token, target.fbIndex, newSeconds, target.id)
             .catch(err => console.error('Failed to update task seconds:', err));
         }
       } else {
