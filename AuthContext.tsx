@@ -25,10 +25,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [auth, setAuth] = useState<AuthState | null>(null);
 
   useEffect(() => {
-    AsyncStorage.multiGet(['token', 'refreshToken', 'userId']).then(pairs => {
-      const map = Object.fromEntries(pairs.map(([k, v]) => [k, v]));
-      if (map.token && map.refreshToken && map.userId) {
-        setAuth({ token: map.token, refreshToken: map.refreshToken, userId: map.userId });
+    AsyncStorage.multiGet(['token', 'refreshToken', 'userId']).then(async (pairs: [string, string | null][]) => {
+      const map = Object.fromEntries(pairs.map(([k, v]: [string, string | null]) => [k, v]));
+      if (map.refreshToken && map.userId) {
+        try {
+          // Always refresh on startup — stored idToken may be expired
+          const res = await fetch(REFRESH_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ grant_type: 'refresh_token', refresh_token: map.refreshToken }),
+          });
+          const data = await res.json();
+          if (res.ok) {
+            await persist({ token: data.id_token, refreshToken: data.refresh_token, userId: data.user_id });
+          }
+        } catch {
+          // Refresh failed — user will need to log in again
+        }
       }
     });
   }, []);
@@ -58,33 +71,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setAuth(null);
   };
 
-  const refreshIdToken = async (currentRefreshToken: string): Promise<AuthState> => {
-    const res = await fetch(REFRESH_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ grant_type: 'refresh_token', refresh_token: currentRefreshToken }),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error('Token refresh failed');
-    const next: AuthState = {
-      token: data.id_token,
-      refreshToken: data.refresh_token,
-      userId: data.user_id,
-    };
-    await persist(next);
-    return next;
-  };
-
-  // Returns a valid token, refreshing if needed
+  // Returns the current token (always fresh — refreshed on app startup)
   const getToken = async (): Promise<string> => {
     if (!auth) throw new Error('Not authenticated');
-    try {
-      // Try a lightweight token validation by refreshing proactively when needed
-      return auth.token;
-    } catch {
-      const next = await refreshIdToken(auth.refreshToken);
-      return next.token;
-    }
+    return auth.token;
   };
 
   return <AuthContext.Provider value={{ auth, login, logout, getToken }}>{children}</AuthContext.Provider>;

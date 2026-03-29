@@ -1,8 +1,13 @@
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { useAuth } from './AuthContext';
-import { fetchTasks, saveTasks } from './services/firebase';
+import { fetchTasks } from './services/firebase';
 
-export type Lap = { name: string; time: number };
+export type Lap = {
+  name: string;
+  time: number;    // milliseconds
+  id?: string;     // Firebase plan id
+  fbIndex?: number; // index in today_plans array
+};
 
 type LapContextType = {
   laps: Lap[];
@@ -27,18 +32,10 @@ export function LapProvider({ children }: { children: React.ReactNode }) {
         initialLoadDone.current = true;
       })
       .catch(err => {
-        console.error('Failed to load laps:', err);
+        console.error('Failed to load tasks:', err);
         initialLoadDone.current = true;
       });
   }, [auth?.userId]);
-
-  // Save to Firebase whenever laps change (skip initial load)
-  useEffect(() => {
-    if (!initialLoadDone.current || !auth) return;
-    getToken()
-      .then(token => saveTasks(auth.userId, token, laps))
-      .catch(err => console.error('Failed to save laps:', err));
-  }, [laps]);
 
   return <LapContext.Provider value={{ laps, setLaps }}>{children}</LapContext.Provider>;
 }
