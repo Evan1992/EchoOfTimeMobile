@@ -5,7 +5,7 @@ import { styles } from '../AppStyles';
 import { useLaps } from '../LapContext';
 import { useAuth } from '../AuthContext';
 import { addTask, updateTaskSeconds, renameTask, deleteTask } from '../services/firebase';
-import SwipeableLapRow from '../components/SwipeableLapRow';
+import SwipeableLapRow, { SwipeableLapRowHandle } from '../components/SwipeableLapRow';
 
 export default function TodayScreen() {
   const [elapsed, setElapsed] = useState(0); // milliseconds
@@ -18,6 +18,7 @@ export default function TodayScreen() {
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const startTimeRef = useRef<number>(0);
   const lastTapRef = useRef<{ index: number; time: number } | null>(null);
+  const swipeableRefs = useRef<Map<number, SwipeableLapRowHandle>>(new Map());
 
   const start = () => {
     startTimeRef.current = Date.now() - elapsed;
@@ -84,10 +85,15 @@ export default function TodayScreen() {
     setEditingIndex(null);
   };
 
+  const closeAllSwipeables = () => {
+    swipeableRefs.current.forEach(ref => ref.close());
+  };
+
   const dismissEditing = () => {
     Keyboard.dismiss();
     commitEdit();
     setSelectedIndex(null);
+    closeAllSwipeables();
   };
 
   const format = (ms: number) => {
@@ -124,14 +130,17 @@ export default function TodayScreen() {
               const lap = laps[lapIdx];
               if (!lap) return null;
               return (
-                <SwipeableLapRow key={lapIdx} onDelete={async () => {
+                <SwipeableLapRow
+                  key={lapIdx}
+                  ref={el => { if (el) swipeableRefs.current.set(lapIdx, el); else swipeableRefs.current.delete(lapIdx); }}
+                  onDelete={async () => {
                   setLaps(prev => prev.filter((_, j) => j !== lapIdx));
                   if (auth && lap.fbIndex !== undefined) {
                     const token = await getToken();
                     deleteTask(auth.userId, token, lap.fbIndex!)
                       .catch(err => console.error('Failed to delete task:', err));
                   }
-                }}>
+                  }}>
                   <Pressable
                     style={[styles.lapRow, selectedIndex === lapIdx && styles.lapRowSelected]}
                     onPress={(e) => {

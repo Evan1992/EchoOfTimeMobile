@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { forwardRef, useImperativeHandle, useRef } from 'react';
 import { Animated, StyleSheet, Text, View } from 'react-native';
 import { Swipeable } from 'react-native-gesture-handler';
 
@@ -7,8 +7,16 @@ type Props = {
   onDelete: () => void;
 };
 
-export default function SwipeableLapRow({ children, onDelete }: Props) {
+export type SwipeableLapRowHandle = {
+  close: () => void;
+};
+
+const SwipeableLapRow = forwardRef<SwipeableLapRowHandle, Props>(function SwipeableLapRow({ children, onDelete }, ref) {
   const swipeableRef = useRef<Swipeable>(null);
+
+  useImperativeHandle(ref, () => ({
+    close: () => swipeableRef.current?.close(),
+  }));
 
   const renderRightActions = (_: Animated.AnimatedInterpolation<number>, dragX: Animated.AnimatedInterpolation<number>) => {
     const scale = dragX.interpolate({ inputRange: [-80, 0], outputRange: [1, 0.5], extrapolate: 'clamp' });
@@ -24,7 +32,9 @@ export default function SwipeableLapRow({ children, onDelete }: Props) {
       {children}
     </Swipeable>
   );
-}
+});
+
+export default SwipeableLapRow;
 
 const styles = StyleSheet.create({
   deleteAction: {
