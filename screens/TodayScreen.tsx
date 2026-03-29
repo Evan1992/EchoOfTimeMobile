@@ -77,8 +77,8 @@ export default function TodayScreen() {
           .map((lap, i) => i === matchIndex ? { ...lap, time: lap.time + renamed[editingIndex].time } : lap)
           .filter((_, i) => i !== editingIndex);
       });
-      if (target.fbIndex !== undefined) {
-        renameTask(auth.userId, token, target.fbIndex, trimmed)
+      if (target.id !== undefined) {
+        renameTask(auth.userId, token, target.fbIndex, trimmed, target.id)
           .catch(err => console.error('Failed to rename task:', err));
       }
     }

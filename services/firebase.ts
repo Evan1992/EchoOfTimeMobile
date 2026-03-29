@@ -141,13 +141,36 @@ export async function deleteTask(userId: string, token: string, fbIndex: number)
 export async function renameTask(
   userId: string,
   token: string,
-  fbIndex: number,
+  fbIndex: number | undefined,
   title: string,
+  planId: string,
 ): Promise<void> {
-  const res = await fetch(`${TODAY_PLAN_PATH(userId, fbIndex)}?auth=${token}`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ title }),
-  });
-  if (!res.ok) throw new Error(`Failed to rename task: ${res.status}`);
+  const updates: Promise<void>[] = [];
+
+  if (fbIndex !== undefined) {
+    updates.push(
+      fetch(`${TODAY_PLAN_PATH(userId, fbIndex)}?auth=${token}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title }),
+      }).then(res => { if (!res.ok) throw new Error(`Failed to rename in today_plans: ${res.status}`); })
+    );
+  }
+
+  updates.push(
+    fetch(`${DB_URL}/${userId}/active_plan/short_term_plan/daily_plans.json?auth=${token}`)
+      .then(res => { if (!res.ok) throw new Error(`Failed to fetch daily_plans: ${res.status}`); return res.json(); })
+      .then(async (dailyPlans: any[]) => {
+        if (!dailyPlans) return;
+        const idx = dailyPlans.findIndex((p: any) => p.id === planId);
+        if (idx === -1) return;
+        const res = await fetch(
+          `${DB_URL}/${userId}/active_plan/short_term_plan/daily_plans/${idx}.json?auth=${token}`,
+          { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title }) }
+        );
+        if (!res.ok) throw new Error(`Failed to rename in daily_plans: ${res.status}`);
+      })
+  );
+
+  await Promise.all(updates);
 }
