@@ -1,6 +1,6 @@
 import { StatusBar } from 'expo-status-bar';
 import { useRef, useState } from 'react';
-import { Keyboard, Pressable, Text, TextInput, TouchableWithoutFeedback, View } from 'react-native';
+import { Keyboard, Pressable, RefreshControl, ScrollView, Text, TextInput, TouchableWithoutFeedback, View } from 'react-native';
 import { styles } from '../AppStyles';
 import { useLaps } from '../LapContext';
 import { useAuth } from '../AuthContext';
@@ -10,7 +10,8 @@ import SwipeableLapRow, { SwipeableLapRowHandle } from '../components/SwipeableL
 export default function TodayScreen() {
   const [elapsed, setElapsed] = useState(0); // milliseconds
   const [running, setRunning] = useState(false);
-  const { laps, setLaps, activeIndices } = useLaps();
+  const { laps, setLaps, activeIndices, refresh } = useLaps();
+  const [refreshing, setRefreshing] = useState(false);
   const { auth, getToken } = useAuth();
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
@@ -105,9 +106,19 @@ export default function TodayScreen() {
 
   const pad = (n: number) => String(n).padStart(2, '0');
 
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await refresh().catch(err => console.error('Failed to refresh:', err));
+    setRefreshing(false);
+  };
+
   return (
     <TouchableWithoutFeedback onPress={dismissEditing}>
-      <View style={styles.container}>
+      <ScrollView
+        contentContainerStyle={styles.container}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        keyboardShouldPersistTaps="handled"
+      >
         <StatusBar style="auto" />
         <Text style={styles.timer}>{format(elapsed)}</Text>
         <View style={styles.buttons}>
@@ -124,9 +135,8 @@ export default function TodayScreen() {
             <Text style={styles.buttonText}>{running ? 'Pause' : 'Start'}</Text>
           </Pressable>
         </View>
-        {laps.length > 0 && (
-          <View style={styles.laps}>
-            {activeIndices.map((lapIdx) => {
+        <View style={styles.laps}>
+          {activeIndices.map((lapIdx) => {
               const lap = laps[lapIdx];
               if (!lap) return null;
               return (
@@ -173,9 +183,8 @@ export default function TodayScreen() {
                 </SwipeableLapRow>
               );
             })}
-          </View>
-        )}
-      </View>
+        </View>
+      </ScrollView>
     </TouchableWithoutFeedback>
   );
 }

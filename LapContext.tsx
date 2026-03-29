@@ -14,6 +14,7 @@ type LapContextType = {
   setLaps: React.Dispatch<React.SetStateAction<Lap[]>>;
   activeIndices: number[];       // FIFO queue, max 5, indices into laps[]
   activateTask: (index: number) => void; // push to tail, drop head
+  refresh: () => Promise<void>;
 };
 
 const LapContext = createContext<LapContextType | null>(null);
@@ -49,8 +50,16 @@ export function LapProvider({ children }: { children: React.ReactNode }) {
     });
   };
 
+  const refresh = async () => {
+    if (!auth) return;
+    const token = await getToken();
+    const data = await fetchTasks(auth.userId, token);
+    setLaps(data);
+    setActiveIndices(data.slice(0, 5).map((_, i) => i));
+  };
+
   return (
-    <LapContext.Provider value={{ laps, setLaps, activeIndices, activateTask }}>
+    <LapContext.Provider value={{ laps, setLaps, activeIndices, activateTask, refresh }}>
       {children}
     </LapContext.Provider>
   );
