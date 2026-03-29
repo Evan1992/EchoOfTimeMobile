@@ -3,12 +3,15 @@ import { useRef, useState } from 'react';
 import { Keyboard, Pressable, Text, TextInput, TouchableWithoutFeedback, View } from 'react-native';
 import { styles } from '../AppStyles';
 import { useLaps } from '../LapContext';
+import { useAuth } from '../AuthContext';
+import { addTask, updateTaskSeconds, renameTask, deleteTask } from '../services/firebase';
 import SwipeableLapRow from '../components/SwipeableLapRow';
 
 export default function TodayScreen() {
   const [elapsed, setElapsed] = useState(0); // milliseconds
   const [running, setRunning] = useState(false);
   const { laps, setLaps } = useLaps();
+  const { auth, getToken } = useAuth();
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [editingName, setEditingName] = useState('');
@@ -29,17 +32,26 @@ export default function TodayScreen() {
     setRunning(false);
   };
 
-  const stop = () => {
+  const stop = async () => {
     if (intervalRef.current) clearInterval(intervalRef.current);
     setRunning(false);
-    if (elapsed > 0) {
-      setLaps(prev => {
-        if (selectedIndex !== null && selectedIndex < prev.length) {
-          return prev.map((lap, i) => i === selectedIndex ? { ...lap, time: lap.time + elapsed } : lap);
+    if (elapsed > 0 && auth) {
+      const token = await getToken();
+      if (selectedIndex !== null && selectedIndex < laps.length) {
+        const target = laps[selectedIndex];
+        const newSeconds = Math.floor((target.time + elapsed) / 1000);
+        setLaps(prev => prev.map((lap, i) => i === selectedIndex ? { ...lap, time: lap.time + elapsed } : lap));
+        if (target.fbIndex !== undefined) {
+          updateTaskSeconds(auth.userId, token, target.fbIndex, newSeconds)
+            .catch(err => console.error('Failed to update task seconds:', err));
         }
-        const next = [{ name: `Lap ${prev.length + 1}`, time: elapsed }, ...prev];
-        return next;
-      });
+      } else {
+        const name = `Lap ${laps.length + 1}`;
+        const seconds = Math.floor(elapsed / 1000);
+        setLaps(prev => [{ name, time: elapsed }, ...prev]);
+        addTask(auth.userId, token, name, seconds)
+          .catch(err => console.error('Failed to add task:', err));
+      }
     }
     setElapsed(0);
   };
@@ -49,10 +61,12 @@ export default function TodayScreen() {
     setEditingName(laps[index].name);
   };
 
-  const commitEdit = () => {
+  const commitEdit = async () => {
     if (editingIndex === null) return;
     const trimmed = editingName.trim();
-    if (trimmed.length > 0) {
+    if (trimmed.length > 0 && auth) {
+      const token = await getToken();
+      const target = laps[editingIndex];
       setLaps(prev => {
         const renamed = prev.map((lap, i) => i === editingIndex ? { ...lap, name: trimmed } : lap);
         const matchIndex = renamed.findIndex((lap, i) => i !== editingIndex && lap.name === trimmed);
@@ -62,6 +76,10 @@ export default function TodayScreen() {
           .map((lap, i) => i === matchIndex ? { ...lap, time: lap.time + renamed[editingIndex].time } : lap)
           .filter((_, i) => i !== editingIndex);
       });
+      if (target.fbIndex !== undefined) {
+        renameTask(auth.userId, token, target.fbIndex, trimmed)
+          .catch(err => console.error('Failed to rename task:', err));
+      }
     }
     setEditingIndex(null);
   };
@@ -103,7 +121,14 @@ export default function TodayScreen() {
         {laps.length > 0 && (
           <View style={styles.laps}>
             {laps.slice(0, 5).map((lap, i) => (
-              <SwipeableLapRow key={i} onDelete={() => setLaps(prev => prev.filter((_, j) => j !== i))}>
+              <SwipeableLapRow key={i} onDelete={async () => {
+                setLaps(prev => prev.filter((_, j) => j !== i));
+                if (auth && laps[i].fbIndex !== undefined) {
+                  const token = await getToken();
+                  deleteTask(auth.userId, token, laps[i].fbIndex!)
+                    .catch(err => console.error('Failed to delete task:', err));
+                }
+              }}>
                 <Pressable
                   style={[styles.lapRow, selectedIndex === i && styles.lapRowSelected]}
                   onPress={(e) => {
