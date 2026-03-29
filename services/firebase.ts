@@ -43,10 +43,12 @@ export async function fetchTasks(userId: string, token: string): Promise<Lap[]> 
         resultMap.set(plan.id, { plan, fbIndex: index });
       }
     } else {
-      const root = findRoot(plan);
-      if (!resultMap.has(root.id)) {
-        const rootFbIndex = todayPlans.findIndex((p: any) => p.id === root.id);
-        resultMap.set(root.id, { plan: root, fbIndex: rootFbIndex >= 0 ? rootFbIndex : undefined });
+      if (!plan.completed) {
+        const root = findRoot(plan);
+        if (!resultMap.has(root.id)) {
+          const rootFbIndex = todayPlans.findIndex((p: any) => p.id === root.id);
+          resultMap.set(root.id, { plan: root, fbIndex: rootFbIndex >= 0 ? rootFbIndex : undefined });
+        }
       }
     }
   });
