@@ -1,6 +1,6 @@
 import { StatusBar } from 'expo-status-bar';
 import { useRef, useState } from 'react';
-import { Keyboard, Pressable, RefreshControl, ScrollView, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Keyboard, Pressable, RefreshControl, ScrollView, Text, TextInput, View } from 'react-native';
 import { styles } from '../AppStyles';
 import { useLaps } from '../LapContext';
 import { useAuth } from '../AuthContext';
@@ -112,14 +112,18 @@ export default function TodayScreen() {
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await refresh().catch(err => console.error('Failed to refresh:', err));
+    await Promise.all([
+      refresh().catch(err => console.error('Failed to refresh:', err)),
+      new Promise(r => setTimeout(r, 2000)),
+    ]);
     setRefreshing(false);
   };
 
   return (
+    <View style={{ flex: 1 }}>
     <ScrollView
       contentContainerStyle={styles.container}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="transparent" />}
       keyboardShouldPersistTaps="handled"
     >
       <Pressable style={styles.pressableContainer} onPress={dismissEditing}>
@@ -190,5 +194,13 @@ export default function TodayScreen() {
         </View>
       </Pressable>
     </ScrollView>
+    {refreshing && (
+      <ActivityIndicator
+        size="large"
+        color="#ffffff"
+        style={{ position: 'absolute', top: 60, alignSelf: 'center' }}
+      />
+    )}
+    </View>
   );
 }
