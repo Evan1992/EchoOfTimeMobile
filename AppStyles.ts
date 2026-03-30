@@ -8,7 +8,9 @@ export const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   pressableContainer: {
+    flex: 1,
     alignItems: 'center',
+    justifyContent: 'center',
     width: '100%',
   },
   timer: {
