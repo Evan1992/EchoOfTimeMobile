@@ -10,7 +10,7 @@ import SwipeableLapRow, { SwipeableLapRowHandle } from '../components/SwipeableL
 export default function TodayScreen() {
   const [elapsed, setElapsed] = useState(0); // milliseconds
   const [running, setRunning] = useState(false);
-  const { laps, setLaps, activeIndices, refresh } = useLaps();
+  const { laps, setLaps, activeIndices, prependActive, refresh } = useLaps();
   const [refreshing, setRefreshing] = useState(false);
   const { auth, getToken } = useAuth();
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
@@ -51,7 +51,9 @@ export default function TodayScreen() {
         const name = `Lap ${laps.length + 1}`;
         const seconds = Math.floor(elapsed / 1000);
         const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-        setLaps(prev => [{ name, time: elapsed, id }, ...prev]);
+        const newIndex = laps.length;
+        setLaps(prev => [...prev, { name, time: elapsed, id }]);
+        prependActive(newIndex);
         addTask(auth.userId, token, name, seconds, id)
           .then(fbIndex => setLaps(prev => prev.map(lap => lap.id === id ? { ...lap, fbIndex } : lap)))
           .catch(err => console.error('Failed to add task:', err));

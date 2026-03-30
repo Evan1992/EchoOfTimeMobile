@@ -14,6 +14,7 @@ type LapContextType = {
   setLaps: React.Dispatch<React.SetStateAction<Lap[]>>;
   activeIndices: number[];       // FIFO queue, max 5, indices into laps[]
   activateTask: (index: number) => void; // push to tail, drop head
+  prependActive: (index: number) => void; // push to head, drop tail
   refresh: () => Promise<void>;
 };
 
@@ -50,16 +51,31 @@ export function LapProvider({ children }: { children: React.ReactNode }) {
     });
   };
 
+  const prependActive = (index: number) => {
+    setActiveIndices(prev => {
+      if (prev.includes(index)) return prev;
+      return [index, ...prev.slice(0, 4)]; // push to head, drop tail
+    });
+  };
+
   const refresh = async () => {
     if (!auth) return;
     const token = await getToken();
     const data = await fetchTasks(auth.userId, token);
+    // Preserve Today screen order by mapping IDs to new indices
+    const idToNewIndex = new Map(data.map((lap, i) => [lap.id, i]));
+    const newActiveIndices = activeIndices
+      .map(oldIdx => laps[oldIdx]?.id)
+      .filter((id): id is string => id !== undefined)
+      .map(id => idToNewIndex.get(id))
+      .filter((i): i is number => i !== undefined)
+      .slice(0, 5);
     setLaps(data);
-    setActiveIndices(data.slice(0, 5).map((_, i) => i));
+    setActiveIndices(newActiveIndices);
   };
 
   return (
-    <LapContext.Provider value={{ laps, setLaps, activeIndices, activateTask, refresh }}>
+    <LapContext.Provider value={{ laps, setLaps, activeIndices, activateTask, prependActive, refresh }}>
       {children}
     </LapContext.Provider>
   );
