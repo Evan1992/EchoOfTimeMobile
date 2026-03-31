@@ -57,30 +57,62 @@ This app shares a Firebase Realtime Database with the EchoOfTime web app. Both a
 
 Write conflicts between mobile and web are unlikely in practice: the mobile app always fetches the latest server state before performing any write (optimistic-read pattern). The primary concern is **stale reads** — the mobile app displaying outdated data after the web app has made changes.
 
-### Existing Approaches
+### Mechanisms
 
 | Mechanism | Where | How |
 |---|---|---|
-| Pull-to-refresh | Mobile (`LapContext`) | User-triggered full re-fetch of `today_plans` and `daily_plans` in parallel |
-| Tab visibility refetch | Web (`App.js`) | Listens to `visibilitychange`; re-fetches active plan when tab regains focus |
+| **Firebase SSE subscriptions** | Both | Server-pushed `put`/`patch` events update state automatically whenever any client writes |
+| Pull-to-refresh | Mobile (`LapContext`) | User-triggered REST re-fetch; confirms latest snapshot and resets SSE-derived state |
 | Token-aware refresh | Both | Detects expired tokens (401 / 55-min threshold) and refreshes before retrying |
 
-These cover the common case (user switches between apps) but leave a gap: the mobile app has no automatic way to detect changes made on the web while the mobile screen is already open.
+SSE subscriptions replace tab visibility refetch on the web and close the stale-read gap on mobile: both apps now detect changes from any other client automatically, without user action.
 
-### Planned: Firebase Realtime Subscriptions
+### Firebase SSE Subscriptions
 
-To close the stale-read gap, the mobile app will replace one-shot REST fetches with **Firebase SSE (Server-Sent Events)** listeners on the nodes it reads.
+The mobile app subscribes to two Firebase nodes via **Server-Sent Events (SSE)**, receiving server-pushed diffs whenever any client writes to those paths.
 
-**Decision**: Use Firebase's `?event=put` streaming endpoint to receive server-pushed diffs whenever any client writes to the subscribed path.
+**Decision**: Use Firebase's REST streaming endpoint (`Accept: text/event-stream`) over the Firebase JS SDK or polling.
 
 **Rationale over alternatives**:
 - *Polling*: wastes battery and bandwidth; delivers stale data between intervals
 - *Manual refresh only*: requires user action; silent staleness is confusing for a timer app
 - *Full conflict resolution*: unnecessary given the low write-collision risk (see above)
+- *Firebase JS SDK (`firebase` npm package)*: the SDK's realtime listeners (`onValue`) use a persistent WebSocket and would solve the stale-read problem, but introduce disproportionate cost for this use case:
+  - Adds ~200 KB to the bundle for features this app does not need (Firestore, Storage, Analytics, offline cache, write queue)
+  - Requires migrating all existing REST writes to SDK calls — a large refactor with no functional gain, since write conflicts are already low-risk
+  - The SDK manages token refresh internally, which would conflict with the app's existing token-refresh logic; reconciling them adds complexity without benefit
+  - SSE is a natural, minimal extension of the existing REST approach: same URLs, same auth tokens, same write path — only the read response changes from one-shot to streaming
 
-**Scope**: Subscribe to `/{userId}/active_plan/today/today_plans` and `/{userId}/active_plan/short_term_plan/daily_plans` — the two nodes the mobile app displays and mutates.
+**Subscribed nodes**:
+- `/{userId}/active_plan/today/today_plans`
+- `/{userId}/active_plan/short_term_plan/daily_plans`
 
-**Implementation notes**:
-- Requires `react-native-sse` (polyfill for `EventSource`, not available in React Native's JS runtime)
-- Token refresh while a subscription is open: close, refresh token, reopen with new token
-- Subscriptions should be opened after auth is confirmed and torn down on sign-out or unmount
+**Connection model**:
+
+SSE and writes use two independent channels. The client always initiates both, but they serve opposite directions:
+
+```
+┌─────────┐                          ┌──────────┐
+│  Client │                          │ Firebase │
+└────┬────┘                          └────┬─────┘
+     │                                    │
+     │── GET /path.json (SSE) ──────────► │  ← client opens once, stays open
+     │◄─ event: put   ────────────────── │  ← server pushes on any write
+     │◄─ event: patch ────────────────── │
+     │◄─ event: patch ────────────────── │
+     │                                    │
+     │── PATCH /path.json (write) ──────► │  ← separate short-lived request
+     │◄─ 200 OK ──────────────────────── │    closes immediately after
+     │                                    │
+     │── PATCH /path.json (write) ──────► │  ← another separate request
+     │◄─ 200 OK ──────────────────────── │
+```
+
+The SSE connection is long-lived and passive — the client only listens on it. All writes are independent short-lived HTTP requests, identical to the existing REST write path.
+
+**Implementation**:
+- `hooks/useFirebaseSSE.ts` — generic hook; opens the SSE connection, routes `put`/`patch`/`cancel` events to caller-supplied callbacks, closes on unmount or when `path`/`token` changes
+- `LapContext.tsx` — mounts two `useFirebaseSSE` instances (one per node); applies incoming diffs to raw Firebase state via `applyPut`/`applyPatch`, then re-derives `Lap[]` via `computeLaps`; preserves the active task selection across updates by remapping plan IDs
+- `react-native-sse` — polyfill for `EventSource`, which is not available in React Native's JS runtime
+- Token refresh: Firebase sends a `cancel` event when the token expires; the handler calls `getToken()` (which refreshes the token) and updates `sseToken` state, which causes both connections to close and reopen with the new token
+- Connections open after auth is confirmed and tear down on sign-out or unmount
