@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
+import { AppState } from 'react-native';
 import { useAuth } from './AuthContext';
 import { fetchTasks } from './services/firebase';
 import { useFirebaseSSE, SSEPayload } from './hooks/useFirebaseSSE';
@@ -131,6 +132,17 @@ export function LapProvider({ children }: { children: React.ReactNode }) {
     getToken().then(setSseToken).catch(console.error);
   }, [auth?.userId]);
 
+  // Reconnect SSE whenever the app returns to the foreground — the connection
+  // may have silently died while the app was backgrounded.
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active' && auth) {
+        getToken().then(setSseToken).catch(console.error);
+      }
+    });
+    return () => sub.remove();
+  }, [auth?.userId]);
+
   // Derive laps and remap activeIndices after any raw-data change.
   // If laps were previously empty (first meaningful data), initialise activeIndices
   // from scratch; otherwise preserve the user's selection by remapping plan IDs.
@@ -213,7 +225,7 @@ export function LapProvider({ children }: { children: React.ReactNode }) {
   };
 
   // Pull-to-refresh: re-fetch via REST for an immediate confirmed snapshot,
-  // then let SSE continue handling subsequent changes.
+  // then force-reconnect SSE so raw refs are back in sync with the server.
   const refresh = async () => {
     if (!auth) return;
     const token = await getToken();
@@ -231,6 +243,11 @@ export function LapProvider({ children }: { children: React.ReactNode }) {
     activeIndicesRef.current = newActiveIndices;
     setLaps(data);
     setActiveIndices(newActiveIndices);
+    // Reset raw refs and reconnect SSE so it re-receives the initial put event,
+    // keeping todayPlansRef/dailyPlansRef in sync with the REST snapshot.
+    todayPlansRef.current = null;
+    dailyPlansRef.current = null;
+    setSseToken(token);
   };
 
   return (

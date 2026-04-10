@@ -56,6 +56,10 @@ export function useFirebaseSSE(
       onAuthRevokedRef.current();
     });
 
+    es.addEventListener('error', (e) => {
+      console.warn('[SSE] connection error', path, e);
+    });
+
     return () => es.close();
   }, [path, token]);
 }
