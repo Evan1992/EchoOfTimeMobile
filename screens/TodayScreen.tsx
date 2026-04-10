@@ -1,6 +1,17 @@
 import { StatusBar } from 'expo-status-bar';
-import { useRef, useState } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import { ActivityIndicator, Keyboard, Pressable, RefreshControl, ScrollView, Text, TextInput, View } from 'react-native';
+import * as Notifications from 'expo-notifications';
+
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+    shouldShowBanner: true,
+    shouldShowList: true,
+  }),
+});
 import { styles } from '../AppStyles';
 import { useLaps } from '../LapContext';
 import { useAuth } from '../AuthContext';
@@ -20,6 +31,30 @@ export default function TodayScreen() {
   const startTimeRef = useRef<number>(0);
   const lastTapRef = useRef<{ index: number; time: number } | null>(null);
   const swipeableRefs = useRef<Map<number, SwipeableLapRowHandle>>(new Map());
+  const notifIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    Notifications.requestPermissionsAsync();
+  }, []);
+
+  const scheduleNotification = async (elapsedMs: number) => {
+    await cancelNotification();
+    const INTERVAL_MS = 45 * 60 * 1000;
+    const msIntoCurrentInterval = elapsedMs % INTERVAL_MS;
+    const secondsUntilNext = Math.ceil((INTERVAL_MS - msIntoCurrentInterval) / 1000);
+    const id = await Notifications.scheduleNotificationAsync({
+      content: { title: 'Time check', body: '45 minutes have passed.' },
+      trigger: { type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL, seconds: secondsUntilNext, repeats: true },
+    });
+    notifIdRef.current = id;
+  };
+
+  const cancelNotification = async () => {
+    if (notifIdRef.current) {
+      await Notifications.cancelScheduledNotificationAsync(notifIdRef.current);
+      notifIdRef.current = null;
+    }
+  };
 
   const start = () => {
     startTimeRef.current = Date.now() - elapsed;
@@ -27,16 +62,19 @@ export default function TodayScreen() {
       setElapsed(Date.now() - startTimeRef.current);
     }, 1000);
     setRunning(true);
+    scheduleNotification(elapsed);
   };
 
   const pause = () => {
     if (intervalRef.current) clearInterval(intervalRef.current);
     setRunning(false);
+    cancelNotification();
   };
 
   const stop = async () => {
     if (intervalRef.current) clearInterval(intervalRef.current);
     setRunning(false);
+    cancelNotification();
     if (elapsed > 0 && auth) {
       const token = await getToken();
       if (selectedIndex !== null && selectedIndex < laps.length) {
