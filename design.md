@@ -67,7 +67,7 @@ Write conflicts between mobile and web are unlikely in practice: the mobile app 
 
 SSE subscriptions replace tab visibility refetch on the web and close the stale-read gap on mobile: both apps now detect changes from any other client automatically, without user action.
 
-### Firebase SSE Subscriptions
+### Firebase SSE (Server Sent Events) Subscriptions
 
 The mobile app subscribes to two Firebase nodes via **Server-Sent Events (SSE)**, receiving server-pushed diffs whenever any client writes to those paths.
 
