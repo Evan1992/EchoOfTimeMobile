@@ -5,7 +5,7 @@ import { deleteTask } from '../services/firebase';
 import SwipeableLapRow from '../components/SwipeableLapRow';
 
 export default function TasksScreen() {
-  const { laps: tasks, setLaps: setTasks, activeIndices, prependActive } = useLaps();
+  const { laps: tasks, setLaps: setTasks, activeIndices, prependActive, deactivateTask } = useLaps();
   const { auth, getToken } = useAuth();
 
   const format = (ms: number) => {
@@ -37,8 +37,8 @@ export default function TasksScreen() {
                 <Pressable
                   style={[styles.row, isActive && styles.rowActive]}
                   onPress={() => {
-                    if (isActive) return;
-                    prependActive(i);
+                    if (isActive) deactivateTask(i);
+                    else prependActive(i);
                   }}
                 >
                   <Text style={[styles.name, isActive && styles.nameActive]}>{task.name}</Text>

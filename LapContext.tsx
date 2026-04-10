@@ -17,6 +17,7 @@ type LapContextType = {
   activeIndices: number[];       // FIFO queue, max 5, indices into laps[]
   activateTask: (index: number) => void;
   prependActive: (index: number) => void;
+  deactivateTask: (index: number) => void;
   refresh: () => Promise<void>;
 };
 
@@ -224,6 +225,10 @@ export function LapProvider({ children }: { children: React.ReactNode }) {
     });
   };
 
+  const deactivateTask = (index: number) => {
+    setActiveIndices(prev => prev.filter(i => i !== index));
+  };
+
   // Pull-to-refresh: re-fetch via REST for an immediate confirmed snapshot,
   // then force-reconnect SSE so raw refs are back in sync with the server.
   const refresh = async () => {
@@ -251,7 +256,7 @@ export function LapProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <LapContext.Provider value={{ laps, setLaps, activeIndices, activateTask, prependActive, refresh }}>
+    <LapContext.Provider value={{ laps, setLaps, activeIndices, activateTask, prependActive, deactivateTask, refresh }}>
       {children}
     </LapContext.Provider>
   );
