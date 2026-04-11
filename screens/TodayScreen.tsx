@@ -1,6 +1,6 @@
 import { StatusBar } from 'expo-status-bar';
 import { useRef, useState, useEffect } from 'react';
-import { ActivityIndicator, Keyboard, Pressable, RefreshControl, ScrollView, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, AppState, Keyboard, Pressable, RefreshControl, ScrollView, Text, TextInput, View } from 'react-native';
 import * as Notifications from 'expo-notifications';
 
 function formatElapsedMinutes(totalMinutes: number): string {
@@ -41,39 +41,51 @@ export default function TodayScreen() {
   const startTimeRef = useRef<number>(0);
   const lastTapRef = useRef<{ index: number; time: number } | null>(null);
   const swipeableRefs = useRef<Map<number, SwipeableLapRowHandle>>(new Map());
-  const notifIdRef = useRef<string | null>(null);
+  const runningRef = useRef(false);
+  runningRef.current = running;
 
   useEffect(() => {
     Notifications.requestPermissionsAsync();
-    // Clear any repeating notification left over from a previous session.
+    // Cancel any notifications left over from a previous session.
     Notifications.cancelAllScheduledNotificationsAsync();
   }, []);
 
-  const scheduleNotification = async (elapsedMs: number) => {
-    await cancelNotification();
-    const INTERVAL_MS = 45 * 60 * 1000;
-    // Which 45-min mark have we already passed?
-    const completedIntervals = Math.floor(elapsedMs / INTERVAL_MS);
-    // Schedule one notification per upcoming mark (covers ~15 hours).
-    const ids = await Promise.all(
-      Array.from({ length: 20 }, (_, i) => {
-        const markNumber = completedIntervals + 1 + i;
-        const minutes = markNumber * 45;
-        const secondsFromNow = Math.ceil((markNumber * INTERVAL_MS - elapsedMs) / 1000);
-        const body = formatElapsedMinutes(minutes);
-        return Notifications.scheduleNotificationAsync({
-          identifier: `timer-mark-${markNumber}`,
-          content: { title: 'Time check', body },
-          trigger: { type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL, seconds: secondsFromNow, repeats: false },
-        });
-      })
-    );
-    notifIdRef.current = ids[0];
-  };
+  // When the app returns to foreground, reschedule the next notification if
+  // the timer is running, or cancel any leftovers if it isn't.
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state !== 'active') return;
+      if (runningRef.current) {
+        scheduleNextNotification(Date.now() - startTimeRef.current);
+      } else {
+        Notifications.cancelAllScheduledNotificationsAsync();
+      }
+    });
+    return () => sub.remove();
+  }, []);
 
-  const cancelNotification = async () => {
+  // When a notification fires while the app is in the foreground, schedule
+  // the one after it.
+  useEffect(() => {
+    const sub = Notifications.addNotificationReceivedListener(() => {
+      if (runningRef.current) {
+        scheduleNextNotification(Date.now() - startTimeRef.current);
+      }
+    });
+    return () => sub.remove();
+  }, []);
+
+  const scheduleNextNotification = async (elapsedMs: number) => {
     await Notifications.cancelAllScheduledNotificationsAsync();
-    notifIdRef.current = null;
+    const INTERVAL_MS = 45 * 60 * 1000;
+    const markNumber = Math.floor(elapsedMs / INTERVAL_MS) + 1;
+    const secondsFromNow = Math.ceil((markNumber * INTERVAL_MS - elapsedMs) / 1000);
+    const body = formatElapsedMinutes(markNumber * 45);
+    await Notifications.scheduleNotificationAsync({
+      identifier: 'timer-next',
+      content: { title: 'Time check', body },
+      trigger: { type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL, seconds: secondsFromNow, repeats: false },
+    });
   };
 
   const start = () => {
@@ -82,19 +94,19 @@ export default function TodayScreen() {
       setElapsed(Date.now() - startTimeRef.current);
     }, 1000);
     setRunning(true);
-    scheduleNotification(elapsed);
+    scheduleNextNotification(elapsed);
   };
 
   const pause = async () => {
     if (intervalRef.current) clearInterval(intervalRef.current);
     setRunning(false);
-    await cancelNotification();
+    await Notifications.cancelAllScheduledNotificationsAsync();
   };
 
   const stop = async () => {
     if (intervalRef.current) clearInterval(intervalRef.current);
     setRunning(false);
-    cancelNotification();
+    await Notifications.cancelAllScheduledNotificationsAsync();
     if (elapsed > 0 && auth) {
       const token = await getToken();
       if (selectedIndex !== null && selectedIndex < laps.length) {
