@@ -3,6 +3,16 @@ import { useRef, useState, useEffect } from 'react';
 import { ActivityIndicator, Keyboard, Pressable, RefreshControl, ScrollView, Text, TextInput, View } from 'react-native';
 import * as Notifications from 'expo-notifications';
 
+function formatElapsedMinutes(totalMinutes: number): string {
+  if (totalMinutes < 60) return `${totalMinutes} minutes have passed.`;
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  const hourPart = hours === 1 ? '1 hour' : `${hours} hours`;
+  if (minutes === 0) return `${hourPart} have passed.`;
+  const minutePart = minutes === 1 ? '1 minute' : `${minutes} minutes`;
+  return `${hourPart} and ${minutePart} have passed.`;
+}
+
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowAlert: true,
@@ -41,29 +51,29 @@ export default function TodayScreen() {
 
   const scheduleNotification = async (elapsedMs: number) => {
     await cancelNotification();
-    const INTERVAL_S = 45 * 60;
-    const msIntoCurrentInterval = elapsedMs % (INTERVAL_S * 1000);
-    const secondsUntilNext = Math.ceil((INTERVAL_S * 1000 - msIntoCurrentInterval) / 1000);
-    // Schedule a one-shot notification at the next 45-min mark, then a
-    // separate repeating one every 45 min after that.
-    await Notifications.scheduleNotificationAsync({
-      identifier: 'timer-first',
-      content: { title: 'Time check', body: '45 minutes have passed.' },
-      trigger: { type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL, seconds: secondsUntilNext, repeats: false },
-    });
-    const repeatId = await Notifications.scheduleNotificationAsync({
-      content: { title: 'Time check', body: '45 minutes have passed.' },
-      trigger: { type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL, seconds: INTERVAL_S, repeats: true },
-    });
-    notifIdRef.current = repeatId;
+    const INTERVAL_MS = 45 * 60 * 1000;
+    // Which 45-min mark have we already passed?
+    const completedIntervals = Math.floor(elapsedMs / INTERVAL_MS);
+    // Schedule one notification per upcoming mark (covers ~15 hours).
+    const ids = await Promise.all(
+      Array.from({ length: 20 }, (_, i) => {
+        const markNumber = completedIntervals + 1 + i;
+        const minutes = markNumber * 45;
+        const secondsFromNow = Math.ceil((markNumber * INTERVAL_MS - elapsedMs) / 1000);
+        const body = formatElapsedMinutes(minutes);
+        return Notifications.scheduleNotificationAsync({
+          identifier: `timer-mark-${markNumber}`,
+          content: { title: 'Time check', body },
+          trigger: { type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL, seconds: secondsFromNow, repeats: false },
+        });
+      })
+    );
+    notifIdRef.current = ids[0];
   };
 
   const cancelNotification = async () => {
-    await Notifications.cancelScheduledNotificationAsync('timer-first').catch(() => {});
-    if (notifIdRef.current) {
-      await Notifications.cancelScheduledNotificationAsync(notifIdRef.current);
-      notifIdRef.current = null;
-    }
+    await Notifications.cancelAllScheduledNotificationsAsync();
+    notifIdRef.current = null;
   };
 
   const start = () => {
