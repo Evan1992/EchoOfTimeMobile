@@ -35,21 +35,31 @@ export default function TodayScreen() {
 
   useEffect(() => {
     Notifications.requestPermissionsAsync();
+    // Clear any repeating notification left over from a previous session.
+    Notifications.cancelAllScheduledNotificationsAsync();
   }, []);
 
   const scheduleNotification = async (elapsedMs: number) => {
     await cancelNotification();
-    const INTERVAL_MS = 45 * 60 * 1000;
-    const msIntoCurrentInterval = elapsedMs % INTERVAL_MS;
-    const secondsUntilNext = Math.ceil((INTERVAL_MS - msIntoCurrentInterval) / 1000);
-    const id = await Notifications.scheduleNotificationAsync({
+    const INTERVAL_S = 45 * 60;
+    const msIntoCurrentInterval = elapsedMs % (INTERVAL_S * 1000);
+    const secondsUntilNext = Math.ceil((INTERVAL_S * 1000 - msIntoCurrentInterval) / 1000);
+    // Schedule a one-shot notification at the next 45-min mark, then a
+    // separate repeating one every 45 min after that.
+    await Notifications.scheduleNotificationAsync({
+      identifier: 'timer-first',
       content: { title: 'Time check', body: '45 minutes have passed.' },
-      trigger: { type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL, seconds: secondsUntilNext, repeats: true },
+      trigger: { type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL, seconds: secondsUntilNext, repeats: false },
     });
-    notifIdRef.current = id;
+    const repeatId = await Notifications.scheduleNotificationAsync({
+      content: { title: 'Time check', body: '45 minutes have passed.' },
+      trigger: { type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL, seconds: INTERVAL_S, repeats: true },
+    });
+    notifIdRef.current = repeatId;
   };
 
   const cancelNotification = async () => {
+    await Notifications.cancelScheduledNotificationAsync('timer-first').catch(() => {});
     if (notifIdRef.current) {
       await Notifications.cancelScheduledNotificationAsync(notifIdRef.current);
       notifIdRef.current = null;
@@ -65,10 +75,10 @@ export default function TodayScreen() {
     scheduleNotification(elapsed);
   };
 
-  const pause = () => {
+  const pause = async () => {
     if (intervalRef.current) clearInterval(intervalRef.current);
     setRunning(false);
-    cancelNotification();
+    await cancelNotification();
   };
 
   const stop = async () => {
