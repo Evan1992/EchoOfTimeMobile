@@ -27,6 +27,7 @@ import { useLaps } from '../LapContext';
 import { useAuth } from '../AuthContext';
 import { addTask, updateTaskSeconds, addToUsedTime, renameTask, deleteTask } from '../services/firebase';
 import SwipeableLapRow, { SwipeableLapRowHandle } from '../components/SwipeableLapRow';
+import { startLiveActivity, updateLiveActivity, stopLiveActivity } from '../services/EchoTimer';
 
 export default function TodayScreen() {
   const [elapsed, setElapsed] = useState(0); // milliseconds
@@ -43,6 +44,9 @@ export default function TodayScreen() {
   const swipeableRefs = useRef<Map<number, SwipeableLapRowHandle>>(new Map());
   const runningRef = useRef(false);
   runningRef.current = running;
+  const activityIdRef = useRef<string | null>(null);
+  // Keep a ref so interval callbacks always read the current task name.
+  const taskNameRef = useRef('Timer');
 
   useEffect(() => {
     Notifications.requestPermissionsAsync();
@@ -88,6 +92,11 @@ export default function TodayScreen() {
     });
   };
 
+  const taskName = (selectedIndex !== null && selectedIndex < laps.length)
+    ? laps[selectedIndex].name
+    : 'Timer';
+  taskNameRef.current = taskName;
+
   const start = () => {
     startTimeRef.current = Date.now() - elapsed;
     intervalRef.current = setInterval(() => {
@@ -95,18 +104,29 @@ export default function TodayScreen() {
     }, 1000);
     setRunning(true);
     scheduleNextNotification(elapsed);
+    startLiveActivity(taskName, startTimeRef.current)
+      .then(id => { activityIdRef.current = id; })
+      .catch(() => {});
   };
 
   const pause = async () => {
     if (intervalRef.current) clearInterval(intervalRef.current);
     setRunning(false);
     await Notifications.cancelAllScheduledNotificationsAsync();
+    if (activityIdRef.current) {
+      updateLiveActivity(activityIdRef.current, taskNameRef.current, startTimeRef.current, false)
+        .catch(() => {});
+    }
   };
 
   const stop = async () => {
     if (intervalRef.current) clearInterval(intervalRef.current);
     setRunning(false);
     await Notifications.cancelAllScheduledNotificationsAsync();
+    if (activityIdRef.current) {
+      stopLiveActivity(activityIdRef.current).catch(() => {});
+      activityIdRef.current = null;
+    }
     if (elapsed > 0 && auth) {
       const token = await getToken();
       if (selectedIndex !== null && selectedIndex < laps.length) {

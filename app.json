@@ -12,7 +12,9 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.yilong.echooftimemobile",
+      "minimumOsVersion": "16.2"
     },
     "android": {
       "adaptiveIcon": {
@@ -21,7 +23,8 @@
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.yilong.echooftimemobile"
     },
     "web": {
       "favicon": "./assets/favicon.png"
