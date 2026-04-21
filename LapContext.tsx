@@ -115,6 +115,7 @@ export function LapProvider({ children }: { children: React.ReactNode }) {
   const [activeIndices, setActiveIndices] = useState<number[]>([]);
   // sseToken drives the SSE connection URLs; changing it closes and reopens both connections.
   const [sseToken, setSseToken] = useState<string | null>(null);
+  const [sseNonce, setSseNonce] = useState(0);
   const { auth, getToken } = useAuth();
 
   // Refs let SSE callbacks always read the latest values without stale closures.
@@ -138,7 +139,9 @@ export function LapProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const sub = AppState.addEventListener('change', (state) => {
       if (state === 'active' && auth) {
-        getToken().then(setSseToken).catch(console.error);
+        getToken()
+          .then(token => { setSseToken(token); setSseNonce(n => n + 1); })
+          .catch(console.error);
       }
     });
     return () => sub.remove();
@@ -148,11 +151,21 @@ export function LapProvider({ children }: { children: React.ReactNode }) {
   // If laps were previously empty (first meaningful data), initialise activeIndices
   // from scratch; otherwise preserve the user's selection by remapping plan IDs.
   const applyAndUpdate = () => {
-    const newLaps = computeLaps(todayPlansRef.current, dailyPlansRef.current);
+    const firebaseLaps = computeLaps(todayPlansRef.current, dailyPlansRef.current);
+    const firebaseIds = new Set(firebaseLaps.map(l => l.id));
+
+    // Laps that exist locally but haven't been confirmed by Firebase yet
+    // (optimistic adds with fbIndex still undefined). Preserve them so an
+    // SSE event that arrives before the write completes doesn't silently
+    // drop them from the list.
+    const pendingLaps = lapsRef.current.filter(
+      l => l.fbIndex === undefined && l.id && !firebaseIds.has(l.id)
+    );
+    const newLaps = [...firebaseLaps, ...pendingLaps];
 
     let newActiveIndices: number[];
     if (lapsRef.current.length === 0) {
-      newActiveIndices = newLaps.slice(0, 5).map((_, i) => i);
+      newActiveIndices = firebaseLaps.slice(0, 5).map((_, i) => i);
     } else {
       const idToNewIndex = new Map(newLaps.map((lap, i) => [lap.id, i]));
       newActiveIndices = activeIndicesRef.current
@@ -186,6 +199,7 @@ export function LapProvider({ children }: { children: React.ReactNode }) {
   useFirebaseSSE(
     todayPath,
     sseToken,
+    sseNonce,
     ({ path, data }: SSEPayload) => {
       todayPlansRef.current = applyPut(todayPlansRef.current, path, data);
       applyAndUpdate();
@@ -200,6 +214,7 @@ export function LapProvider({ children }: { children: React.ReactNode }) {
   useFirebaseSSE(
     dailyPath,
     sseToken,
+    sseNonce,
     ({ path, data }: SSEPayload) => {
       dailyPlansRef.current = applyPut(dailyPlansRef.current, path, data);
       applyAndUpdate();
@@ -253,6 +268,7 @@ export function LapProvider({ children }: { children: React.ReactNode }) {
     todayPlansRef.current = null;
     dailyPlansRef.current = null;
     setSseToken(token);
+    setSseNonce(n => n + 1);
   };
 
   return (

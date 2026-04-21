@@ -18,6 +18,7 @@ type FirebaseSSEEvent = 'put' | 'patch' | 'cancel';
 export function useFirebaseSSE(
   path: string | null,
   token: string | null,
+  nonce: number,
   onPut: (payload: SSEPayload) => void,
   onPatch: (payload: SSEPayload) => void,
   onAuthRevoked: () => void,
@@ -61,5 +62,5 @@ export function useFirebaseSSE(
     });
 
     return () => es.close();
-  }, [path, token]);
+  }, [path, token, nonce]);
 }
