@@ -35,7 +35,7 @@ export default function TasksScreen() {
                 }
               }}>
                 <Pressable
-                  style={[styles.row, isActive && styles.rowActive]}
+                  style={[styles.row, task.parentId && styles.rowChild, isActive && styles.rowActive]}
                   onPress={() => {
                     if (isActive) deactivateTask(i);
                     else prependActive(i);
@@ -75,6 +75,11 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderBottomWidth: 1,
     borderBottomColor: '#2a2a2a',
+  },
+  rowChild: {
+    borderLeftWidth: 3,
+    borderLeftColor: '#4a4a4a',
+    paddingLeft: 8,
   },
   rowActive: {
     borderLeftWidth: 2,

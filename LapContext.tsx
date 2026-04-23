@@ -9,6 +9,7 @@ export type Lap = {
   time: number;     // milliseconds
   id?: string;      // Firebase plan id
   fbIndex?: number; // index in today_plans array
+  parentId?: string; // set only when the parent is also in the visible task list
 };
 
 type LapContextType = {
@@ -39,44 +40,57 @@ function firebaseToArray(val: unknown): any[] {
   return [];
 }
 
+// The app day runs 2:00am–1:59am, so shift back 2 hours before extracting the date.
+function getTodayDateString(): string {
+  const d = new Date(Date.now() - 2 * 60 * 60 * 1000);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 // Derive Lap[] from raw today_plans / daily_plans received via SSE or REST.
 // Mirrors the logic in fetchTasks so both code paths produce identical results.
 function computeLaps(rawTodayPlans: unknown, rawDailyPlans: unknown): Lap[] {
   const todayPlans = firebaseToArray(rawTodayPlans);
   const dailyPlans = firebaseToArray(rawDailyPlans);
+  const today = getTodayDateString();
 
-  const idPlanMap = new Map<string, any>();
-  for (const plan of dailyPlans) idPlanMap.set(plan.id, plan);
-  for (const plan of todayPlans) idPlanMap.set(plan.id, plan);
-
-  const findRoot = (plan: any): any => {
-    if (plan.parent_id === undefined) return plan;
-    const parent = idPlanMap.get(plan.parent_id);
-    if (!parent) return plan;
-    return findRoot(parent);
-  };
-
+  // today_plans take priority: process daily_plans first, then overwrite with today_plans
   const resultMap = new Map<string, { plan: any; fbIndex: number | undefined }>();
+  dailyPlans.forEach((plan: any) => {
+    if (!plan.completed && plan.date === today) {
+      resultMap.set(plan.id, { plan, fbIndex: undefined });
+    }
+  });
   todayPlans.forEach((plan: any, index: number) => {
-    if (plan.parent_id === undefined) {
-      if (!plan.completed) resultMap.set(plan.id, { plan, fbIndex: index });
-    } else {
-      if (!plan.completed) {
-        const root = findRoot(plan);
-        if (!resultMap.has(root.id)) {
-          const rootFbIndex = todayPlans.findIndex((p: any) => p.id === root.id);
-          resultMap.set(root.id, { plan: root, fbIndex: rootFbIndex >= 0 ? rootFbIndex : undefined });
-        }
-      }
+    if (!plan.completed && plan.date === today) {
+      resultMap.set(plan.id, { plan, fbIndex: index });
     }
   });
 
-  return Array.from(resultMap.values()).map(({ plan, fbIndex }) => ({
-    name: plan.title,
-    time: (plan.seconds ?? 0) * 1000,
-    id: plan.id,
-    fbIndex,
-  }));
+  // Sort so parents appear immediately before their children.
+  // Only treat a task as a child if its parent is also in the visible set.
+  const idSet = new Set(resultMap.keys());
+  const childrenByParent = new Map<string, string[]>();
+  const rootIds: string[] = [];
+  for (const [id, { plan }] of resultMap) {
+    if (plan.parent_id && idSet.has(plan.parent_id)) {
+      const arr = childrenByParent.get(plan.parent_id) ?? [];
+      arr.push(id);
+      childrenByParent.set(plan.parent_id, arr);
+    } else {
+      rootIds.push(id);
+    }
+  }
+
+  const sorted: Lap[] = [];
+  function addWithChildren(id: string) {
+    const { plan, fbIndex } = resultMap.get(id)!;
+    const parentId = (plan.parent_id && idSet.has(plan.parent_id)) ? plan.parent_id as string : undefined;
+    sorted.push({ name: plan.title, time: (plan.seconds ?? 0) * 1000, id: plan.id, fbIndex, parentId });
+    (childrenByParent.get(id) ?? []).forEach(addWithChildren);
+  }
+  rootIds.forEach(addWithChildren);
+
+  return sorted;
 }
 
 // Apply a Firebase SSE `put` event: replaces the value at path.
