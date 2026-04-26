@@ -41,7 +41,7 @@ export default function TasksScreen() {
                     else prependActive(i);
                   }}
                 >
-                  <Text style={[styles.name, isActive && styles.nameActive]}>{task.name}</Text>
+                  <Text numberOfLines={1} style={[styles.name, isActive && styles.nameActive]}>{task.name}</Text>
                   <Text style={[styles.time, isActive && styles.timeActive]}>{format(task.time)}</Text>
                 </Pressable>
               </SwipeableLapRow>
@@ -89,6 +89,8 @@ const styles = StyleSheet.create({
   name: {
     color: '#aaaaaa',
     fontSize: 18,
+    flex: 1,
+    marginRight: 8,
   },
   nameActive: {
     color: '#ffffff',

@@ -276,7 +276,7 @@ export default function TodayScreen() {
                         selectTextOnFocus
                       />
                     ) : (
-                      <Text style={[styles.lapLabel, selectedIndex === lapIdx && styles.lapLabelSelected]}>{lap.name}</Text>
+                      <Text numberOfLines={1} style={[styles.lapLabel, selectedIndex === lapIdx && styles.lapLabelSelected]}>{lap.name}</Text>
                     )}
                     <Text style={styles.lapTime}>{format(lap.time)}</Text>
                   </Pressable>

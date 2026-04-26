@@ -59,6 +59,8 @@ export const styles = StyleSheet.create({
   lapLabel: {
     color: '#aaaaaa',
     fontSize: 18,
+    flex: 1,
+    marginRight: 8,
   },
   lapLabelSelected: {
     color: '#ffffff',
