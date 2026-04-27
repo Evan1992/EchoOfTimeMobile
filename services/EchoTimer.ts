@@ -38,3 +38,20 @@ export function stopLiveActivity(activityId: string): Promise<void> {
   if (!isSupported) return Promise.resolve();
   return EchoTimerModule.stopActivity(activityId);
 }
+
+export interface ActivityState {
+  taskName: string;
+  startDateMs: number;
+  isRunning: boolean;
+  pausedAtMs?: number;
+  pendingAction?: string; // 'stop' | 'resume'
+}
+
+/**
+ * Returns the current ContentState of the named Live Activity, or null if it
+ * no longer exists. Used by TodayScreen to detect lock-screen pause/stop/resume.
+ */
+export function getActivityState(activityId: string): Promise<ActivityState | null> {
+  if (!isSupported) return Promise.resolve(null);
+  return EchoTimerModule.getActivityState(activityId);
+}

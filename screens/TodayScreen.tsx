@@ -27,7 +27,7 @@ import { useLaps } from '../LapContext';
 import { useAuth } from '../AuthContext';
 import { addTask, updateTaskSeconds, addToUsedTime, renameTask, deleteTask } from '../services/firebase';
 import SwipeableLapRow, { SwipeableLapRowHandle } from '../components/SwipeableLapRow';
-import { startLiveActivity, updateLiveActivity, stopLiveActivity } from '../services/EchoTimer';
+import { startLiveActivity, updateLiveActivity, stopLiveActivity, getActivityState } from '../services/EchoTimer';
 
 export default function TodayScreen() {
   const [elapsed, setElapsed] = useState(0); // milliseconds
@@ -44,9 +44,13 @@ export default function TodayScreen() {
   const swipeableRefs = useRef<Map<number, SwipeableLapRowHandle>>(new Map());
   const runningRef = useRef(false);
   runningRef.current = running;
+  const elapsedRef = useRef(0);
+  elapsedRef.current = elapsed;
   const activityIdRef = useRef<string | null>(null);
   // Keep a ref so interval callbacks always read the current task name.
   const taskNameRef = useRef('Timer');
+  // Always points to the latest stop() so the AppState handler (empty deps) can call it.
+  const stopRef = useRef<(elapsedOverride?: number) => Promise<void>>(async () => {});
 
   useEffect(() => {
     Notifications.requestPermissionsAsync();
@@ -56,9 +60,47 @@ export default function TodayScreen() {
 
   // When the app returns to foreground, reschedule the next notification if
   // the timer is running, or cancel any leftovers if it isn't.
+  // Also check for any pause/stop commands issued from the lock screen.
   useEffect(() => {
-    const sub = AppState.addEventListener('change', (state) => {
+    const sub = AppState.addEventListener('change', async (state) => {
       if (state !== 'active') return;
+
+      // Check for a lock-screen action written into the Live Activity ContentState.
+      if (activityIdRef.current) {
+        const actState = await getActivityState(activityIdRef.current);
+        if (actState) {
+          const elapsedFromIntent = actState.pausedAtMs !== undefined
+            ? actState.pausedAtMs - actState.startDateMs
+            : undefined;
+
+          if (actState.pendingAction === 'stop') {
+            // Stop and save using the elapsed captured at the moment of the tap.
+            await stopRef.current(elapsedFromIntent);
+            return;
+          } else if (actState.pendingAction === 'resume') {
+            // Correct elapsed to what it was at the lock-screen pause, then let
+            // the existing start() flow handle the rest when user taps Start.
+            if (elapsedFromIntent !== undefined) {
+              if (intervalRef.current) clearInterval(intervalRef.current);
+              intervalRef.current = null;
+              setElapsed(elapsedFromIntent);
+              setRunning(false);
+            }
+            // Clear pendingAction by re-updating the activity.
+            updateLiveActivity(activityIdRef.current, actState.taskName, actState.startDateMs, false)
+              .catch(() => {});
+          } else if (!actState.isRunning && runningRef.current) {
+            // Plain pause from lock screen — freeze elapsed at the recorded instant.
+            if (intervalRef.current) clearInterval(intervalRef.current);
+            intervalRef.current = null;
+            if (elapsedFromIntent !== undefined) setElapsed(elapsedFromIntent);
+            setRunning(false);
+            await Notifications.cancelAllScheduledNotificationsAsync();
+            return;
+          }
+        }
+      }
+
       if (runningRef.current) {
         scheduleNextNotification(Date.now() - startTimeRef.current);
       } else {
@@ -119,7 +161,8 @@ export default function TodayScreen() {
     }
   };
 
-  const stop = async () => {
+  const stop = async (elapsedOverride?: number) => {
+    const effectiveElapsed = elapsedOverride !== undefined ? elapsedOverride : elapsed;
     if (intervalRef.current) clearInterval(intervalRef.current);
     setRunning(false);
     await Notifications.cancelAllScheduledNotificationsAsync();
@@ -127,22 +170,22 @@ export default function TodayScreen() {
       stopLiveActivity(activityIdRef.current).catch(() => {});
       activityIdRef.current = null;
     }
-    if (elapsed > 0 && auth) {
+    if (effectiveElapsed > 0 && auth) {
       const token = await getToken();
       if (selectedIndex !== null && selectedIndex < laps.length) {
         const target = laps[selectedIndex];
-        const newSeconds = Math.floor((target.time + elapsed) / 1000);
-        setLaps(prev => prev.map((lap, i) => i === selectedIndex ? { ...lap, time: lap.time + elapsed } : lap));
+        const newSeconds = Math.floor((target.time + effectiveElapsed) / 1000);
+        setLaps(prev => prev.map((lap, i) => i === selectedIndex ? { ...lap, time: lap.time + effectiveElapsed } : lap));
         if (target.id !== undefined) {
-          updateTaskSeconds(auth.userId, token, target.fbIndex, newSeconds, target.id, Math.floor(elapsed / 1000))
+          updateTaskSeconds(auth.userId, token, target.fbIndex, newSeconds, target.id, Math.floor(effectiveElapsed / 1000))
             .catch(err => console.error('Failed to update task seconds:', err));
         }
       } else {
         const name = `Lap ${laps.length + 1}`;
-        const seconds = Math.floor(elapsed / 1000);
+        const seconds = Math.floor(effectiveElapsed / 1000);
         const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
         const newIndex = laps.length;
-        setLaps(prev => [...prev, { name, time: elapsed, id }]);
+        setLaps(prev => [...prev, { name, time: effectiveElapsed, id }]);
         prependActive(newIndex);
         addTask(auth.userId, token, name, seconds, id)
           .then(fbIndex => setLaps(prev => prev.map(lap => lap.id === id ? { ...lap, fbIndex } : lap)))
@@ -153,6 +196,7 @@ export default function TodayScreen() {
     }
     setElapsed(0);
   };
+  stopRef.current = stop;
 
   const startEditing = (index: number) => {
     setEditingIndex(index);
@@ -224,7 +268,7 @@ export default function TodayScreen() {
         <View style={styles.buttons}>
           <Pressable
             style={[styles.button, styles.resetButton]}
-            onPress={stop}
+            onPress={() => stop()}
           >
             <Text style={styles.buttonText}>Stop</Text>
           </Pressable>
