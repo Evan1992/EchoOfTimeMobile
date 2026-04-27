@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 import { useAuth } from './AuthContext';
-import { fetchTasks } from './services/firebase';
+import { fetchTasks, refreshTodoEveryday } from './services/firebase';
 import { useFirebaseSSE, SSEPayload } from './hooks/useFirebaseSSE';
 
 export type Lap = {
@@ -46,15 +46,23 @@ function getTodayDateString(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-// Derive Lap[] from raw today_plans / daily_plans received via SSE or REST.
+// Derive Lap[] from raw today_plans / daily_plans / todo_everyday node received via SSE or REST.
 // Mirrors the logic in fetchTasks so both code paths produce identical results.
-function computeLaps(rawTodayPlans: unknown, rawDailyPlans: unknown): Lap[] {
+// Priority (highest last, so it overwrites): todo_every_plans < daily_plans < today_plans.
+function computeLaps(rawTodayPlans: unknown, rawDailyPlans: unknown, rawTodoEveryNode: unknown): Lap[] {
   const todayPlans = firebaseToArray(rawTodayPlans);
   const dailyPlans = firebaseToArray(rawDailyPlans);
+  // rawTodoEveryNode is the whole todo_everyday object { dateOfToday, todo_everyday_plans: [...] }
+  const todoEveryPlans = firebaseToArray((rawTodoEveryNode as any)?.todo_everyday_plans);
   const today = getTodayDateString();
 
-  // today_plans take priority: process daily_plans first, then overwrite with today_plans
+  // today_plans take priority: process todo_every_plans first, then daily_plans, then today_plans.
   const resultMap = new Map<string, { plan: any; fbIndex: number | undefined }>();
+  todoEveryPlans.forEach((plan: any) => {
+    if (!plan.completed && plan.date === today) {
+      resultMap.set(plan.id, { plan, fbIndex: undefined });
+    }
+  });
   dailyPlans.forEach((plan: any) => {
     if (!plan.completed && plan.date === today) {
       resultMap.set(plan.id, { plan, fbIndex: undefined });
@@ -137,6 +145,7 @@ export function LapProvider({ children }: { children: React.ReactNode }) {
   const activeIndicesRef = useRef<number[]>([]);
   const todayPlansRef = useRef<unknown>(null);
   const dailyPlansRef = useRef<unknown>(null);
+  const todoEveryPlansRef = useRef<unknown>(null);
   lapsRef.current = laps;
   activeIndicesRef.current = activeIndices;
 
@@ -145,6 +154,7 @@ export function LapProvider({ children }: { children: React.ReactNode }) {
     if (!auth) { setSseToken(null); return; }
     todayPlansRef.current = null;
     dailyPlansRef.current = null;
+    todoEveryPlansRef.current = null;
     getToken().then(setSseToken).catch(console.error);
   }, [auth?.userId]);
 
@@ -165,7 +175,7 @@ export function LapProvider({ children }: { children: React.ReactNode }) {
   // If laps were previously empty (first meaningful data), initialise activeIndices
   // from scratch; otherwise preserve the user's selection by remapping plan IDs.
   const applyAndUpdate = () => {
-    const firebaseLaps = computeLaps(todayPlansRef.current, dailyPlansRef.current);
+    const firebaseLaps = computeLaps(todayPlansRef.current, dailyPlansRef.current, todoEveryPlansRef.current);
     const firebaseIds = new Set(firebaseLaps.map(l => l.id));
 
     // Laps that exist locally but haven't been confirmed by Firebase yet
@@ -209,6 +219,24 @@ export function LapProvider({ children }: { children: React.ReactNode }) {
 
   const todayPath = auth ? `/${auth.userId}/active_plan/today/today_plans` : null;
   const dailyPath = auth ? `/${auth.userId}/active_plan/short_term_plan/daily_plans` : null;
+  // Listen to the parent node so dateOfToday is visible alongside the plans array.
+  const todoEveryPath = auth ? `/${auth.userId}/short_term_plan/todo_everyday` : null;
+
+  // If the todo_everyday node's dateOfToday is stale, reset all plans to today and PUT back.
+  // Firebase SSE will push the updated node back down to re-trigger applyAndUpdate.
+  const checkAndRefreshTodoEvery = async () => {
+    if (!auth) return;
+    const node = todoEveryPlansRef.current as any;
+    if (!node) return;
+    if (node.dateOfToday === getTodayDateString()) return;
+    try {
+      const token = await getToken();
+      const plans = firebaseToArray(node.todo_everyday_plans);
+      await refreshTodoEveryday(auth.userId, token, plans);
+    } catch (err) {
+      console.error('Failed to refresh todo_everyday dates:', err);
+    }
+  };
 
   useFirebaseSSE(
     todayPath,
@@ -236,6 +264,23 @@ export function LapProvider({ children }: { children: React.ReactNode }) {
     ({ path, data }: SSEPayload) => {
       dailyPlansRef.current = applyPatch(dailyPlansRef.current, path, data as Record<string, unknown>);
       applyAndUpdate();
+    },
+    handleAuthRevoked,
+  );
+
+  useFirebaseSSE(
+    todoEveryPath,
+    sseToken,
+    sseNonce,
+    ({ path, data }: SSEPayload) => {
+      todoEveryPlansRef.current = applyPut(todoEveryPlansRef.current, path, data);
+      applyAndUpdate();
+      checkAndRefreshTodoEvery();
+    },
+    ({ path, data }: SSEPayload) => {
+      todoEveryPlansRef.current = applyPatch(todoEveryPlansRef.current, path, data as Record<string, unknown>);
+      applyAndUpdate();
+      checkAndRefreshTodoEvery();
     },
     handleAuthRevoked,
   );
@@ -278,9 +323,10 @@ export function LapProvider({ children }: { children: React.ReactNode }) {
     setLaps(data);
     setActiveIndices(newActiveIndices);
     // Reset raw refs and reconnect SSE so it re-receives the initial put event,
-    // keeping todayPlansRef/dailyPlansRef in sync with the REST snapshot.
+    // keeping todayPlansRef/dailyPlansRef/todoEveryPlansRef in sync with the REST snapshot.
     todayPlansRef.current = null;
     dailyPlansRef.current = null;
+    todoEveryPlansRef.current = null;
     setSseToken(token);
     setSseNonce(n => n + 1);
   };

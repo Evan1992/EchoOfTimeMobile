@@ -5,6 +5,8 @@ const TODAY_PLANS_PATH = (userId: string) =>
   `${DB_URL}/${userId}/active_plan/today/today_plans.json`;
 const TODAY_PLAN_PATH = (userId: string, fbIndex: number) =>
   `${DB_URL}/${userId}/active_plan/today/today_plans/${fbIndex}.json`;
+const TODO_EVERY_PATH = (userId: string) =>
+  `${DB_URL}/${userId}/short_term_plan/todo_everyday.json`;
 
 // The app day runs 2:00am–1:59am, so shift back 2 hours before extracting the date.
 function getTodayDateString(): string {
@@ -12,21 +14,50 @@ function getTodayDateString(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
+// Resets all todo_everyday_plans to today's date with completed: false and PUTs back to Firebase.
+// Firebase SSE will push the updated node back down to any active listeners.
+export async function refreshTodoEveryday(userId: string, token: string, plans: any[]): Promise<void> {
+  const today = getTodayDateString();
+  const updatedPlans = plans.map((p: any) => ({ ...p, date: today, completed: false }));
+  const res = await fetch(`${TODO_EVERY_PATH(userId)}?auth=${token}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ dateOfToday: today, todo_everyday_plans: updatedPlans }),
+  });
+  if (!res.ok) throw new Error(`Failed to refresh todo_everyday: ${res.status}`);
+}
+
 export async function fetchTasks(userId: string, token: string): Promise<Lap[]> {
-  const [todayRes, shortTermRes] = await Promise.all([
+  const [todayRes, shortTermRes, todoEveryRes] = await Promise.all([
     fetch(`${DB_URL}/${userId}/active_plan/today.json?auth=${token}`),
     fetch(`${DB_URL}/${userId}/active_plan/short_term_plan/daily_plans.json?auth=${token}`),
+    fetch(`${TODO_EVERY_PATH(userId)}?auth=${token}`),
   ]);
   if (!todayRes.ok) throw new Error(`Failed to fetch tasks: ${todayRes.status}`);
   if (!shortTermRes.ok) throw new Error(`Failed to fetch short_term_plan: ${shortTermRes.status}`);
+  if (!todoEveryRes.ok) throw new Error(`Failed to fetch todo_everyday: ${todoEveryRes.status}`);
 
   const todayData = await todayRes.json();
   const todayPlans: any[] = todayData?.today_plans ?? [];
   const dailyPlans: any[] = (await shortTermRes.json()) ?? [];
+  const todoEveryNode = await todoEveryRes.json();
+  let todoEveryPlans: any[] = todoEveryNode?.todo_everyday_plans ?? [];
   const today = getTodayDateString();
 
-  // resultMap keyed by plan id to deduplicate; today_plans take priority
+  // If dateOfToday is stale, reset all plans and write back before computing laps.
+  if (todoEveryNode && todoEveryNode.dateOfToday !== today) {
+    await refreshTodoEveryday(userId, token, todoEveryPlans);
+    todoEveryPlans = todoEveryPlans.map((p: any) => ({ ...p, date: today, completed: false }));
+  }
+
+  // resultMap keyed by plan id to deduplicate.
+  // Priority (highest last, so it overwrites): todo_every_plans < daily_plans < today_plans.
   const resultMap = new Map<string, { plan: any; fbIndex: number | undefined }>();
+  todoEveryPlans.forEach((plan: any) => {
+    if (!plan.completed && plan.date === today) {
+      resultMap.set(plan.id, { plan, fbIndex: undefined });
+    }
+  });
   dailyPlans.forEach((plan: any) => {
     if (!plan.completed && plan.date === today) {
       resultMap.set(plan.id, { plan, fbIndex: undefined });
