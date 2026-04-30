@@ -54,7 +54,7 @@ export async function fetchTasks(userId: string, token: string): Promise<Lap[]> 
   // Priority (highest last, so it overwrites): todo_every_plans < daily_plans < today_plans.
   const resultMap = new Map<string, { plan: any; fbIndex: number | undefined }>();
   todoEveryPlans.forEach((plan: any) => {
-    if (!plan.completed && plan.date === today) {
+    if (!plan.completed) {
       resultMap.set(plan.id, { plan, fbIndex: undefined });
     }
   });

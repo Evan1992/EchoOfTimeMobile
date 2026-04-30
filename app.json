@@ -14,7 +14,8 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.yilong.echooftimemobile",
-      "minimumOsVersion": "16.2"
+      "minimumOsVersion": "16.2",
+      "scheme": "echotimer"
     },
     "android": {
       "adaptiveIcon": {

@@ -20,7 +20,10 @@ class EchoTimerModule: NSObject {
             let state = TimerActivityAttributes.ContentState(
                 taskName: taskName,
                 startDate: startDate,
-                isRunning: true
+                isRunning: true,
+                pausedElapsedSeconds: 0,
+                pausedAt: nil,
+                pendingAction: nil
             )
             let activity = try Activity<TimerActivityAttributes>.request(
                 attributes: attributes,
@@ -42,10 +45,14 @@ class EchoTimerModule: NSObject {
     ) {
         guard #available(iOS 16.2, *) else { resolve(nil); return }
         let startDate = Date(timeIntervalSince1970: startDateMs / 1000)
+        let elapsedSeconds = isRunning ? 0.0 : max(0, Date().timeIntervalSince1970 - startDateMs / 1000)
         let state = TimerActivityAttributes.ContentState(
             taskName: taskName,
             startDate: startDate,
-            isRunning: isRunning
+            isRunning: isRunning,
+            pausedElapsedSeconds: elapsedSeconds,
+            pausedAt: isRunning ? nil : Date(),
+            pendingAction: nil
         )
         Task {
             for activity in Activity<TimerActivityAttributes>.activities

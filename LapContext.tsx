@@ -59,7 +59,7 @@ function computeLaps(rawTodayPlans: unknown, rawDailyPlans: unknown, rawTodoEver
   // today_plans take priority: process todo_every_plans first, then daily_plans, then today_plans.
   const resultMap = new Map<string, { plan: any; fbIndex: number | undefined }>();
   todoEveryPlans.forEach((plan: any) => {
-    if (!plan.completed && plan.date === today) {
+    if (!plan.completed) {
       resultMap.set(plan.id, { plan, fbIndex: undefined });
     }
   });

@@ -1,6 +1,6 @@
 import { StatusBar } from 'expo-status-bar';
 import { useRef, useState, useEffect } from 'react';
-import { ActivityIndicator, AppState, Keyboard, Pressable, RefreshControl, ScrollView, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, AppState, Keyboard, Linking, Pressable, RefreshControl, ScrollView, Text, TextInput, View } from 'react-native';
 import * as Notifications from 'expo-notifications';
 
 function formatElapsedMinutes(totalMinutes: number): string {
@@ -27,7 +27,7 @@ import { useLaps } from '../LapContext';
 import { useAuth } from '../AuthContext';
 import { addTask, updateTaskSeconds, addToUsedTime, renameTask, deleteTask } from '../services/firebase';
 import SwipeableLapRow, { SwipeableLapRowHandle } from '../components/SwipeableLapRow';
-import { startLiveActivity, updateLiveActivity, stopLiveActivity, getActivityState } from '../services/EchoTimer';
+import { startLiveActivity, updateLiveActivity, stopLiveActivity, getActivityState, getPendingStopAction } from '../services/EchoTimer';
 
 export default function TodayScreen() {
   const [elapsed, setElapsed] = useState(0); // milliseconds
@@ -51,6 +51,9 @@ export default function TodayScreen() {
   const taskNameRef = useRef('Timer');
   // Always points to the latest stop() so the AppState handler (empty deps) can call it.
   const stopRef = useRef<(elapsedOverride?: number) => Promise<void>>(async () => {});
+  // Always points to the latest pause() / start() so the URL handler (empty deps) can call them.
+  const pauseRef = useRef<() => Promise<void>>(async () => {});
+  const startRef = useRef<() => void>(() => {});
 
   useEffect(() => {
     Notifications.requestPermissionsAsync();
@@ -65,7 +68,17 @@ export default function TodayScreen() {
     const sub = AppState.addEventListener('change', async (state) => {
       if (state !== 'active') return;
 
-      // Check for a lock-screen action written into the Live Activity ContentState.
+      // Check for a stop committed from the lock screen — StopTimerIntent ends the
+      // Live Activity immediately and writes data to App Group UserDefaults instead.
+      const pendingStop = await getPendingStopAction();
+      if (pendingStop) {
+        const elapsedMs = pendingStop.pausedAtMs - pendingStop.startDateMs;
+        activityIdRef.current = null;
+        await stopRef.current(elapsedMs);
+        return;
+      }
+
+      // Check for a pause/resume action written into the Live Activity ContentState.
       if (activityIdRef.current) {
         const actState = await getActivityState(activityIdRef.current);
         if (actState) {
@@ -73,11 +86,7 @@ export default function TodayScreen() {
             ? actState.pausedAtMs - actState.startDateMs
             : undefined;
 
-          if (actState.pendingAction === 'stop') {
-            // Stop and save using the elapsed captured at the moment of the tap.
-            await stopRef.current(elapsedFromIntent);
-            return;
-          } else if (actState.pendingAction === 'resume') {
+          if (actState.pendingAction === 'resume') {
             // Correct elapsed to what it was at the lock-screen pause, then let
             // the existing start() flow handle the rest when user taps Start.
             if (elapsedFromIntent !== undefined) {
@@ -89,6 +98,8 @@ export default function TodayScreen() {
             // Clear pendingAction by re-updating the activity.
             updateLiveActivity(activityIdRef.current, actState.taskName, actState.startDateMs, false)
               .catch(() => {});
+            await Notifications.cancelAllScheduledNotificationsAsync();
+            return;
           } else if (!actState.isRunning && runningRef.current) {
             // Plain pause from lock screen — freeze elapsed at the recorded instant.
             if (intervalRef.current) clearInterval(intervalRef.current);
@@ -107,6 +118,24 @@ export default function TodayScreen() {
         Notifications.cancelAllScheduledNotificationsAsync();
       }
     });
+    return () => sub.remove();
+  }, []);
+
+  // Handle deep-link URLs from the Live Activity lock-screen buttons.
+  // echotimer://pause  → pause the timer
+  // echotimer://resume → show the app so the user can tap Start
+  // echotimer://stop   → stop and save elapsed
+  useEffect(() => {
+    const handleUrl = ({ url }: { url: string }) => {
+      if (url === 'echotimer://pause') {
+        pauseRef.current();
+      } else if (url === 'echotimer://stop') {
+        stopRef.current();
+      } else if (url === 'echotimer://resume') {
+        startRef.current();
+      }
+    };
+    const sub = Linking.addEventListener('url', handleUrl);
     return () => sub.remove();
   }, []);
 
@@ -146,10 +175,17 @@ export default function TodayScreen() {
     }, 1000);
     setRunning(true);
     scheduleNextNotification(elapsed);
-    startLiveActivity(taskName, startTimeRef.current)
-      .then(id => { activityIdRef.current = id; })
-      .catch(() => {});
+    if (activityIdRef.current) {
+      // Resume: update the existing Live Activity instead of creating a new one.
+      updateLiveActivity(activityIdRef.current, taskNameRef.current, startTimeRef.current, true)
+        .catch(() => {});
+    } else {
+      startLiveActivity(taskName, startTimeRef.current)
+        .then(id => { activityIdRef.current = id; })
+        .catch(() => {});
+    }
   };
+  startRef.current = start;
 
   const pause = async () => {
     if (intervalRef.current) clearInterval(intervalRef.current);
@@ -160,6 +196,7 @@ export default function TodayScreen() {
         .catch(() => {});
     }
   };
+  pauseRef.current = pause;
 
   const stop = async (elapsedOverride?: number) => {
     const effectiveElapsed = elapsedOverride !== undefined ? elapsedOverride : elapsed;

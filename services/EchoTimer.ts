@@ -55,3 +55,19 @@ export function getActivityState(activityId: string): Promise<ActivityState | nu
   if (!isSupported) return Promise.resolve(null);
   return EchoTimerModule.getActivityState(activityId);
 }
+
+export interface PendingStopAction {
+  taskName: string;
+  startDateMs: number;
+  pausedAtMs: number;
+}
+
+/**
+ * Reads and clears the stop action written by StopTimerIntent into App Group
+ * UserDefaults. Returns the stop data or null if none is pending.
+ * Call this on every foreground transition so a lock-screen stop is never missed.
+ */
+export function getPendingStopAction(): Promise<PendingStopAction | null> {
+  if (!isSupported) return Promise.resolve(null);
+  return EchoTimerModule.getPendingStopAction();
+}
