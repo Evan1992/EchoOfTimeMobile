@@ -187,17 +187,28 @@ export function LapProvider({ children }: { children: React.ReactNode }) {
     );
     const newLaps = [...firebaseLaps, ...pendingLaps];
 
-    let newActiveIndices: number[];
-    if (lapsRef.current.length === 0) {
-      newActiveIndices = firebaseLaps.slice(0, 5).map((_, i) => i);
-    } else {
-      const idToNewIndex = new Map(newLaps.map((lap, i) => [lap.id, i]));
-      newActiveIndices = activeIndicesRef.current
-        .map(oldIdx => lapsRef.current[oldIdx]?.id)
-        .filter((id): id is string => id !== undefined)
-        .map(id => idToNewIndex.get(id))
-        .filter((i): i is number => i !== undefined)
-        .slice(0, 5);
+    const idToNewIndex = new Map(newLaps.map((lap, i) => [lap.id, i]));
+    // IDs that existed before this update — used to detect truly new tasks.
+    const prevIds = new Set(lapsRef.current.map(l => l.id).filter(Boolean) as string[]);
+
+    // Remap existing activeIndices to their new positions by ID.
+    let newActiveIndices: number[] = activeIndicesRef.current
+      .map(oldIdx => lapsRef.current[oldIdx]?.id)
+      .filter((id): id is string => id !== undefined)
+      .map(id => idToNewIndex.get(id))
+      .filter((i): i is number => i !== undefined)
+      .slice(0, 5);
+
+    // Auto-activate tasks that are genuinely new (not previously in laps), filling
+    // up to 5 slots. This ensures tasks from all three SSE sources are shown
+    // regardless of which SSE connection delivers its initial data first.
+    const activeSet = new Set(newActiveIndices);
+    for (let i = 0; i < newLaps.length && newActiveIndices.length < 5; i++) {
+      const lapId = newLaps[i].id;
+      if (!activeSet.has(i) && lapId && !prevIds.has(lapId)) {
+        newActiveIndices.push(i);
+        activeSet.add(i);
+      }
     }
 
     // Update refs immediately so rapid back-to-back SSE events see fresh values.

@@ -6,7 +6,11 @@ const TODAY_PLANS_PATH = (userId: string) =>
 const TODAY_PLAN_PATH = (userId: string, fbIndex: number) =>
   `${DB_URL}/${userId}/active_plan/today/today_plans/${fbIndex}.json`;
 const TODO_EVERY_PATH = (userId: string) =>
-  `${DB_URL}/${userId}/short_term_plan/todo_everyday.json`;
+  `${DB_URL}/${userId}/active_plan/short_term_plan/todo_everyday.json`;
+const TODO_EVERY_PLANS_PATH = (userId: string) =>
+  `${DB_URL}/${userId}/active_plan/short_term_plan/todo_everyday/todo_everyday_plans.json`;
+const TODO_EVERY_DATE_PATH = (userId: string) =>
+  `${DB_URL}/${userId}/active_plan/short_term_plan/todo_everyday/dateOfToday.json`;
 
 // The app day runs 2:00am–1:59am, so shift back 2 hours before extracting the date.
 function getTodayDateString(): string {
@@ -19,12 +23,20 @@ function getTodayDateString(): string {
 export async function refreshTodoEveryday(userId: string, token: string, plans: any[]): Promise<void> {
   const today = getTodayDateString();
   const updatedPlans = plans.map((p: any) => ({ ...p, date: today, completed: false }));
-  const res = await fetch(`${TODO_EVERY_PATH(userId)}?auth=${token}`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ dateOfToday: today, todo_everyday_plans: updatedPlans }),
-  });
-  if (!res.ok) throw new Error(`Failed to refresh todo_everyday: ${res.status}`);
+  const [plansRes, dateRes] = await Promise.all([
+    fetch(`${TODO_EVERY_PLANS_PATH(userId)}?auth=${token}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updatedPlans),
+    }),
+    fetch(`${TODO_EVERY_DATE_PATH(userId)}?auth=${token}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(today),
+    }),
+  ]);
+  if (!plansRes.ok) throw new Error(`Failed to refresh todo_everyday_plans: ${plansRes.status}`);
+  if (!dateRes.ok) throw new Error(`Failed to refresh todo_everyday dateOfToday: ${dateRes.status}`);
 }
 
 export async function fetchTasks(userId: string, token: string): Promise<Lap[]> {
